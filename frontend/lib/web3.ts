@@ -1,8 +1,34 @@
+// lib/web3.ts
 import { ethers } from "ethers"
-import { CONTRACT_ADDRESSES } from "./constants"
-import {  COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
-// Import the actual ABIs from your ABI file
+import { CONTRACT_ADDRESSES, NETWORKS } from "./constants"
+import { COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
 
+// 1. Updated interface to include initiator
+export interface TransactionDetails {
+  initiator: string
+  to: string
+  value: bigint
+  data: string
+  isTokenTransfer: boolean
+  tokenAddress: string
+  executed: boolean
+  confirmationCount: bigint
+  timestamp: bigint
+  timelockEnd: bigint
+}
+
+export interface FullTransaction extends TransactionDetails {
+  id: bigint
+  currentUserHasConfirmed: boolean
+}
+
+export interface Owner {
+  address: string
+  percentage: bigint
+  exists: boolean
+  isRemovable: boolean
+  index: bigint
+}
 
 export class Web3Service {
   private provider: ethers.BrowserProvider | null = null
@@ -19,6 +45,9 @@ export class Web3Service {
       // Request access to accounts if not already granted
       await this.provider.send("eth_requestAccounts", [])
       
+      // Switch to Base Sepolia if not already on it
+      await this.switchToBaseSepolia()
+      
       this.signer = await this.provider.getSigner()
 
       return await this.signer.getAddress()
@@ -29,18 +58,109 @@ export class Web3Service {
       throw new Error(`Failed to connect wallet: ${error.message}`)
     }
   }
+  
+  async getAllTransactions(): Promise<FullTransaction[]> {
+    if (!this.signer) throw new Error("Wallet not connected")
+
+    const contract = this.getMultiSigControllerContract()
+    const userAddress = await this.signer.getAddress()
+    
+    let transactionCount: bigint
+    try {
+      transactionCount = await contract.getTransactionCount()
+    } catch (e) {
+      console.error("Failed to get transaction count", e)
+      return [] // Return empty if count fails
+    }
+
+    if (transactionCount === 0n) {
+      return []
+    }
+
+    const txPromises: Promise<FullTransaction | null>[] = []
+    
+    // Fetch the last 50 transactions (or fewer if less than 50 exist)
+    const limit = 50
+    const startIndex = transactionCount > BigInt(limit) ? transactionCount - BigInt(limit) : 0n
+
+    for (let i = transactionCount - 1n; i >= startIndex; i--) {
+      const txId = i
+      txPromises.push(
+        (async () => {
+          try {
+            // Use the getTransaction method you already defined
+            const txDetails: TransactionDetails = await this.getTransaction(txId)
+            const currentUserHasConfirmed = await this.hasConfirmed(txId, userAddress)
+            
+            return {
+              ...txDetails,
+              id: txId,
+              currentUserHasConfirmed: currentUserHasConfirmed,
+            }
+          } catch (error) {
+            console.error(`Failed to fetch details for tx ${txId}:`, error)
+            return null // Handle error for a single tx
+          }
+        })()
+      )
+    }
+
+    const results = await Promise.all(txPromises)
+    
+    // Filter out nulls (failed fetches) and sort descending by ID (most recent first)
+    return results
+      .filter((tx): tx is FullTransaction => tx !== null)
+      .sort((a, b) => Number(b.id) - Number(a.id))
+  }
+  
+  async switchToBaseSepolia(): Promise<void> {
+    if (!this.provider) return
+
+    try {
+      const network = await this.provider.getNetwork()
+      const currentChainId = Number(network.chainId)
+      
+      if (currentChainId !== NETWORKS.BASE_SEPOLIA.chainId) {
+        try {
+          // Try to switch to Base Sepolia
+          await this.provider.send("wallet_switchEthereumChain", [
+            { chainId: `0x${NETWORKS.BASE_SEPOLIA.chainId.toString(16)}` }
+          ])
+        } catch (switchError: any) {
+          // If the chain is not added, add it
+          if (switchError.code === 4902) {
+            await this.provider.send("wallet_addEthereumChain", [
+              {
+                chainId: `0x${NETWORKS.BASE_SEPOLIA.chainId.toString(16)}`,
+                chainName: NETWORKS.BASE_SEPOLIA.name,
+                nativeCurrency: {
+                  name: "Ether",
+                  symbol: "ETH",
+                  decimals: 18
+                },
+                rpcUrls: [NETWORKS.BASE_SEPOLIA.rpcUrl],
+                blockExplorerUrls: ["https://sepolia.basescan.org"]
+              }
+            ])
+          } else {
+            throw switchError
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to switch to Base Sepolia:", error)
+    }
+  }
 
   async disconnect(): Promise<void> {
     this.provider = null
     this.signer = null
   }
 
-  // Add a method to check if the service is connected
   isConnected(): boolean {
     return this.provider !== null && this.signer !== null
   }
 
-  // Add a method to get the current address without connecting
   async getCurrentAddress(): Promise<string | null> {
     if (!this.signer) return null
     try {
@@ -50,7 +170,6 @@ export class Web3Service {
     }
   }
 
-  // Add method to check network and validate contracts
   async validateContracts(): Promise<{ companyWallet: boolean; multiSigController: boolean }> {
     if (!this.provider) throw new Error("Provider not available")
     
@@ -70,7 +189,7 @@ export class Web3Service {
       if (CONTRACT_ADDRESSES.MULTISIG_CONTROLLER && ethers.isAddress(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)) {
         const code = await this.provider.getCode(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)
         results.multiSigController = code !== "0x"
-      }
+      } 
     } catch (error) {
       console.error("Error validating contracts:", error)
     }
@@ -78,7 +197,6 @@ export class Web3Service {
     return results
   }
 
-  // Add method to get network info
   async getNetworkInfo(): Promise<{ chainId: number; name: string } | null> {
     if (!this.provider) return null
     
@@ -104,6 +222,7 @@ export class Web3Service {
     return new ethers.Contract(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER, MULTISIG_CONTROLLER_ABI, this.signer)
   }
 
+  // Company Wallet Methods
   async getBalance(): Promise<string> {
     if (!this.provider) throw new Error("Provider not available")
     
@@ -116,7 +235,7 @@ export class Web3Service {
     }
   }
 
-  async getTokenBalance(tokenAddress: string): Promise<string> {
+  async getTokenBalance(tokenAddress: string, decimals: number = 18): Promise<string> {
     if (!ethers.isAddress(tokenAddress)) {
       throw new Error("Invalid token address")
     }
@@ -124,86 +243,9 @@ export class Web3Service {
     try {
       const contract = this.getCompanyWalletContract()
       const balance = await contract.getTokenBalance(tokenAddress)
-      return ethers.formatUnits(balance, 18) // Adjust decimals as needed
+      return ethers.formatUnits(balance, decimals)
     } catch (error: any) {
       throw new Error(`Failed to get token balance: ${error.message}`)
-    }
-  }
-
-  async executeTransaction(
-  to: string,
-  value: string,
-  isTokenTransfer: boolean,
-  tokenAddress: string = ethers.ZeroAddress,
-  data = "0x",
-): Promise<ethers.ContractTransactionResponse> {
-  if (!ethers.isAddress(to)) {
-    throw new Error("Invalid recipient address")
-  }
-  
-  if (isTokenTransfer && !ethers.isAddress(tokenAddress)) {
-    throw new Error("Invalid token address")
-  }
-  
-  try {
-    const contract = this.getMultiSigControllerContract()
-    
-    // Convert value appropriately based on transfer type
-    let valueInWei: bigint
-    if (isTokenTransfer) {
-      // For token transfers, value is typically the token amount in wei/smallest unit
-      valueInWei = ethers.parseUnits(value, 18) // Adjust decimals as needed for your token
-    } else {
-      // For ETH transfers, convert from ETH to wei
-      valueInWei = ethers.parseEther(value)
-    }
-
-    // Call the contract method and return the transaction response
-    const tx = await contract.executeTransaction(to, valueInWei, isTokenTransfer, tokenAddress, data)
-    return tx
-  } catch (error: any) {
-    throw new Error(`Failed to execute transaction: ${error.message}`)
-  }
-}
-
-  async receiveTokens(tokenAddress: string, amount: string): Promise<ethers.ContractTransactionResponse> {
-    if (!ethers.isAddress(tokenAddress)) {
-      throw new Error("Invalid token address")
-    }
-    
-    try {
-      const contract = this.getCompanyWalletContract()
-      const amountInWei = ethers.parseUnits(amount, 18) // Adjust decimals as needed
-
-      return await contract.receiveTokens(tokenAddress, amountInWei)
-    } catch (error: any) {
-      throw new Error(`Failed to receive tokens: ${error.message}`)
-    }
-  }
-
-  async setController(newController: string): Promise<ethers.ContractTransactionResponse> {
-    if (!ethers.isAddress(newController)) {
-      throw new Error("Invalid controller address")
-    }
-    
-    try {
-      const contract = this.getCompanyWalletContract()
-      return await contract.setController(newController)
-    } catch (error: any) {
-      throw new Error(`Failed to set controller: ${error.message}`)
-    }
-  }
-
-  async transferOwnership(newOwner: string): Promise<ethers.ContractTransactionResponse> {
-    if (!ethers.isAddress(newOwner)) {
-      throw new Error("Invalid owner address")
-    }
-    
-    try {
-      const contract = this.getCompanyWalletContract()
-      return await contract.transferOwnership(newOwner)
-    } catch (error: any) {
-      throw new Error(`Failed to transfer ownership: ${error.message}`)
     }
   }
 
@@ -224,5 +266,296 @@ export class Web3Service {
       throw new Error(`Failed to get controller: ${error.message}`)
     }
   }
+
+  // MultiSig Controller Methods
+  async submitTransaction(
+    to: string,
+    value: string,
+    isTokenTransfer: boolean,
+    tokenAddress: string = ethers.ZeroAddress,
+    data: string = "0x",
+    tokenDecimals: number = 18
+  ): Promise<{ tx: ethers.ContractTransactionResponse; transactionId?: bigint }> {
+    if (!ethers.isAddress(to)) {
+      throw new Error("Invalid recipient address")
+    }
+    
+    if (isTokenTransfer && !ethers.isAddress(tokenAddress)) {
+      throw new Error("Invalid token address")
+    }
+    
+    try {
+      const contract = this.getMultiSigControllerContract()
+      
+      // Convert value appropriately based on transfer type
+      let valueInWei: bigint
+      if (isTokenTransfer) {
+        // For token transfers, value is the token amount in smallest unit
+        valueInWei = ethers.parseUnits(value, tokenDecimals)
+      } else {
+        // For ETH transfers, convert from ETH to wei
+        valueInWei = ethers.parseEther(value)
+      }
+
+      // Submit transaction to multisig
+      const tx = await contract.submitTransaction(to, valueInWei, isTokenTransfer, tokenAddress, data)
+      
+      // Wait for transaction receipt to get the transaction ID from events
+      const receipt = await tx.wait()
+      let transactionId: bigint | undefined
+      
+      if (receipt && receipt.logs) {
+        // Find the TransactionSubmitted event
+        for (const log of receipt.logs) {
+          try {
+            const parsed = contract.interface.parseLog({
+              topics: log.topics as string[],
+              data: log.data
+            })
+            if (parsed?.name === "TransactionSubmitted") {
+              transactionId = parsed.args[0]
+              break
+            }
+          } catch {}
+        }
+      }
+      
+      return { tx, transactionId }
+    } catch (error: any) {
+      throw new Error(`Failed to submit transaction: ${error.message}`)
+    }
+  }
+
+  async confirmTransaction(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.confirmTransaction(transactionId)
+    } catch (error: any) {
+      throw new Error(`Failed to confirm transaction: ${error.message}`)
+    }
+  }
+
+  async confirmTransactionsBatch(transactionIds: (number | bigint)[]): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.confirmTransactionsBatch(transactionIds)
+    } catch (error: any) {
+      throw new Error(`Failed to confirm transactions batch: ${error.message}`)
+    }
+  }
+
+  async revokeConfirmation(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.revokeConfirmation(transactionId)
+    } catch (error: any) {
+      throw new Error(`Failed to revoke confirmation: ${error.message}`)
+    }
+  }
+
+  async executeTransactionManual(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.executeTransactionManual(transactionId)
+    } catch (error: any) {
+      throw new Error(`Failed to execute transaction: ${error.message}`)
+    }
+  }
+
+  // 2. Updated getTransaction to parse initiator
+  async getTransaction(transactionId: number | bigint): Promise<TransactionDetails> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const tx = await contract.getTransaction(transactionId)
+      
+      return {
+        initiator: tx.initiator,
+        to: tx.to,
+        value: tx.value,
+        data: tx.data,
+        isTokenTransfer: tx.isTokenTransfer,
+        tokenAddress: tx.tokenAddress,
+        executed: tx.executed,
+        confirmationCount: tx.confirmationCount,
+        timestamp: tx.timestamp,
+        timelockEnd: tx.timelockEnd
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to get transaction: ${error.message}`)
+    }
+  }
+
+  async getTransactionCount(): Promise<number> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const count = await contract.getTransactionCount()
+      return Number(count)
+    } catch (error: any) {
+      throw new Error(`Failed to get transaction count: ${error.message}`)
+    }
+  }
+
+  async isConfirmed(transactionId: number | bigint): Promise<boolean> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.isConfirmed(transactionId)
+    } catch (error: any) {
+      throw new Error(`Failed to check confirmation status: ${error.message}`)
+    }
+  }
+
+  async hasConfirmed(transactionId: number | bigint, owner: string): Promise<boolean> {
+    if (!ethers.isAddress(owner)) {
+      throw new Error("Invalid owner address")
+    }
+    
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.hasConfirmed(transactionId, owner)
+    } catch (error: any) {
+      throw new Error(`Failed to check owner confirmation: ${error.message}`)
+    }
+  }
+
+  async getOwners(): Promise<{ addresses: string[]; percentages: bigint[]; removables: boolean[] }> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const result = await contract.getOwners()
+      
+      return {
+        addresses: result.addresses,
+        percentages: result.percentages,
+        removables: result.removables
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to get owners: ${error.message}`)
+    }
+  }
+
+  async getOwnerDetails(address: string): Promise<Owner> {
+    if (!ethers.isAddress(address)) {
+      throw new Error("Invalid owner address")
+    }
+    
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const owner = await contract.owners(address)
+      
+      return {
+        address: owner.ownerAddress,
+        percentage: owner.percentage,
+        exists: owner.exists,
+        isRemovable: owner.isRemovable,
+        index: owner.index
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to get owner details: ${error.message}`)
+    }
+  }
+
+  async getRequiredPercentage(): Promise<number> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const percentage = await contract.requiredPercentage()
+      return Number(percentage)
+    } catch (error: any) {
+      throw new Error(`Failed to get required percentage: ${error.message}`)
+    }
+  }
+
+  async getPoolPercentage(): Promise<number> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      const percentage = await contract.getPoolPercentage()
+      return Number(percentage)
+    } catch (error: any) {
+      throw new Error(`Failed to get pool percentage: ${error.message}`)
+    }
+  }
+
+  async isPaused(): Promise<boolean> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.paused()
+    } catch (error: any) {
+      throw new Error(`Failed to check pause status: ${error.message}`)
+    }
+  }
+
+  // Admin methods (require appropriate permissions)
+  async addOwner(newOwner: string, percentage: number): Promise<ethers.ContractTransactionResponse> {
+    if (!ethers.isAddress(newOwner)) {
+      throw new Error("Invalid owner address")
+    }
+    
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.addOwner(newOwner, percentage)
+    } catch (error: any) {
+      throw new Error(`Failed to add owner: ${error.message}`)
+    }
+  }
+
+  async removeOwner(ownerToRemove: string): Promise<ethers.ContractTransactionResponse> {
+    if (!ethers.isAddress(ownerToRemove)) {
+      throw new Error("Invalid owner address")
+    }
+    
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.removeOwner(ownerToRemove)
+    } catch (error: any) {
+      throw new Error(`Failed to remove owner: ${error.message}`)
+    }
+  }
+
+  async changeRequiredPercentage(newPercentage: number): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.changeRequiredPercentage(newPercentage)
+    } catch (error: any) {
+      throw new Error(`Failed to change required percentage: ${error.message}`)
+    }
+  }
+
+  async pause(): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.pause()
+    } catch (error: any) {
+      throw new Error(`Failed to pause contract: ${error.message}`)
+    }
+  }
+
+  async unpause(): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.unpause()
+    } catch (error: any) {
+      throw new Error(`Failed to unpause contract: ${error.message}`)
+    }
+  }
+
+  // 3. Added the new test function
+  async callTestFunction(): Promise<ethers.ContractTransactionResponse> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.test()
+    } catch (error: any) {
+      throw new Error(`Failed to call test function: ${error.message}`)
+    }
+  }
+
+  // Utility method to wait for transaction confirmation
+  async waitForTransaction(txHash: string): Promise<ethers.TransactionReceipt | null> {
+    if (!this.provider) throw new Error("Provider not available")
+    
+    try {
+      return await this.provider.waitForTransaction(txHash)
+    } catch (error: any) {
+      throw new Error(`Failed to wait for transaction: ${error.message}`)
+    }
+  }
 }
+
 export const web3Service = new Web3Service()

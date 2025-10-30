@@ -5,129 +5,234 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { Shield, User, AlertTriangle } from "lucide-react"
+import { Shield, Users, AlertTriangle, UserPlus, UserMinus, Percent } from "lucide-react"
 import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "@/hooks/use-web3"
 import { truncateAddress } from "@/lib/utils"
 
 export function AdminSettings() {
   const { isConnected, walletAddress } = useWeb3()
-  const [controllerAddress, setControllerAddress] = useState("")
+  const [owners, setOwners] = useState<any[]>([])
   const [newOwnerAddress, setNewOwnerAddress] = useState("")
-  const [isSettingController, setIsSettingController] = useState(false)
-  const [isTransferringOwnership, setIsTransferringOwnership] = useState(false)
-  const [isOwner, setIsOwner] = useState(false)
+  const [newOwnerPercentage, setNewOwnerPercentage] = useState("")
+  const [removeOwnerAddress, setRemoveOwnerAddress] = useState("")
+  const [newRequiredPercentage, setNewRequiredPercentage] = useState("")
+  const [currentRequiredPercentage, setCurrentRequiredPercentage] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
-    const checkOwnership = async () => {
+    const fetchContractInfo = async () => {
       if (!isConnected) return
 
       try {
-        const owner = await web3Service.getOwner()
-        setIsOwner(owner.toLowerCase() === walletAddress.toLowerCase())
+        const [ownersData, reqPercentage, pausedStatus] = await Promise.all([
+          web3Service.getOwners(),
+          web3Service.getRequiredPercentage(),
+          web3Service.isPaused(),
+        ])
+
+        const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
+          address: addr,
+          percentage: Number(ownersData.percentages[index]),
+          removable: ownersData.removables[index],
+        }))
+
+        setOwners(formattedOwners)
+        setCurrentRequiredPercentage(reqPercentage)
+        setIsPaused(pausedStatus)
       } catch (error) {
-        console.error("Error checking ownership:", error)
+        console.error("Error fetching contract info:", error)
       }
     }
 
-    checkOwnership()
-  }, [isConnected, walletAddress])
+    fetchContractInfo()
+  }, [isConnected])
 
-  const setController = async () => {
-    if (!isConnected || !isOwner) {
+  const addOwner = async () => {
+    if (!isConnected) {
       toast({
-        title: "Permission Denied",
-        description: "Only the owner can set a new controller",
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
         variant: "destructive",
       })
       return
     }
 
-    setIsSettingController(true)
+    setIsProcessing(true)
     try {
-      const tx = await web3Service.setController(controllerAddress)
+      const tx = await web3Service.addOwner(newOwnerAddress, Number.parseInt(newOwnerPercentage))
 
       toast({
         title: "Transaction Submitted",
-        description: `Transaction hash: ${truncateAddress(tx.hash)}`,
+        description: `Adding owner ${truncateAddress(newOwnerAddress)}...`,
         className: "bg-blue-600 text-white border-blue-700",
       })
 
-      // Wait for transaction to be mined
-      const receipt = await tx.wait()
+      await tx.wait()
 
       toast({
-        title: "Controller Updated",
-        description: `Controller set to ${truncateAddress(controllerAddress)}`,
-        className: "bg-green-600 text-white border-green-700",
-      })
-
-      setControllerAddress("")
-    } catch (error: any) {
-      console.error("Set controller error:", error)
-      toast({
-        title: "Failed to Set Controller",
-        description: error.message || "Failed to update controller. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSettingController(false)
-    }
-  }
-
-  const transferOwnership = async () => {
-    if (!isConnected || !isOwner) {
-      toast({
-        title: "Permission Denied",
-        description: "Only the owner can transfer ownership",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsTransferringOwnership(true)
-    try {
-      const tx = await web3Service.transferOwnership(newOwnerAddress)
-
-      toast({
-        title: "Transaction Submitted",
-        description: `Transaction hash: ${truncateAddress(tx.hash)}`,
-        className: "bg-blue-600 text-white border-blue-700",
-      })
-
-      // Wait for transaction to be mined
-      const receipt = await tx.wait()
-
-      toast({
-        title: "Ownership Transferred",
-        description: `Ownership transferred to ${truncateAddress(newOwnerAddress)}`,
+        title: "Owner Added",
+        description: `Successfully added ${truncateAddress(newOwnerAddress)} with ${newOwnerPercentage}% voting power`,
         className: "bg-green-600 text-white border-green-700",
       })
 
       setNewOwnerAddress("")
-      setIsOwner(false) // No longer the owner
+      setNewOwnerPercentage("")
+      
+      // Refresh owners list
+      const ownersData = await web3Service.getOwners()
+      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
+        address: addr,
+        percentage: Number(ownersData.percentages[index]),
+        removable: ownersData.removables[index],
+      }))
+      setOwners(formattedOwners)
     } catch (error: any) {
-      console.error("Transfer ownership error:", error)
+      console.error("Add owner error:", error)
       toast({
-        title: "Failed to Transfer Ownership",
-        description: error.message || "Failed to transfer ownership. Please try again.",
+        title: "Failed to Add Owner",
+        description: error.message || "Please try again",
         variant: "destructive",
       })
     } finally {
-      setIsTransferringOwnership(false)
+      setIsProcessing(false)
+    }
+  }
+
+  const removeOwner = async () => {
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessing(true)
+    try {
+      const tx = await web3Service.removeOwner(removeOwnerAddress)
+
+      toast({
+        title: "Transaction Submitted",
+        description: `Removing owner ${truncateAddress(removeOwnerAddress)}...`,
+        className: "bg-blue-600 text-white border-blue-700",
+      })
+
+      await tx.wait()
+
+      toast({
+        title: "Owner Removed",
+        description: `Successfully removed ${truncateAddress(removeOwnerAddress)}`,
+        className: "bg-green-600 text-white border-green-700",
+      })
+
+      setRemoveOwnerAddress("")
+      
+      // Refresh owners list
+      const ownersData = await web3Service.getOwners()
+      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
+        address: addr,
+        percentage: Number(ownersData.percentages[index]),
+        removable: ownersData.removables[index],
+      }))
+      setOwners(formattedOwners)
+    } catch (error: any) {
+      console.error("Remove owner error:", error)
+      toast({
+        title: "Failed to Remove Owner",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const changeRequiredPercentage = async () => {
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessing(true)
+    try {
+      const tx = await web3Service.changeRequiredPercentage(Number.parseInt(newRequiredPercentage))
+
+      toast({
+        title: "Transaction Submitted",
+        description: `Changing required percentage to ${newRequiredPercentage}%...`,
+        className: "bg-blue-600 text-white border-blue-700",
+      })
+
+      await tx.wait()
+
+      toast({
+        title: "Percentage Updated",
+        description: `Required approval percentage changed to ${newRequiredPercentage}%`,
+        className: "bg-green-600 text-white border-green-700",
+      })
+
+      setNewRequiredPercentage("")
+      setCurrentRequiredPercentage(Number.parseInt(newRequiredPercentage))
+    } catch (error: any) {
+      console.error("Change percentage error:", error)
+      toast({
+        title: "Failed to Change Percentage",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const togglePause = async () => {
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessing(true)
+    try {
+      const tx = await (isPaused ? web3Service.unpause() : web3Service.pause())
+
+      toast({
+        title: "Transaction Submitted",
+        description: `${isPaused ? "Unpausing" : "Pausing"} contract...`,
+        className: "bg-blue-600 text-white border-blue-700",
+      })
+
+      await tx.wait()
+
+      toast({
+        title: "Contract Status Updated",
+        description: `Contract has been ${isPaused ? "unpaused" : "paused"}`,
+        className: "bg-green-600 text-white border-green-700",
+      })
+
+      setIsPaused(!isPaused)
+    } catch (error: any) {
+      console.error("Toggle pause error:", error)
+      toast({
+        title: "Failed to Toggle Pause",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -143,20 +248,6 @@ export function AdminSettings() {
     )
   }
 
-  if (!isOwner) {
-    return (
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardContent className="pt-6">
-          <div className="flex items-center space-x-2 text-red-400 justify-center">
-            <AlertTriangle className="h-5 w-5" />
-            <span className="font-medium">Access Denied</span>
-          </div>
-          <p className="text-red-300 mt-2 text-center">Only the wallet owner can access these settings.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Warning Banner */}
@@ -164,149 +255,206 @@ export function AdminSettings() {
         <CardContent className="pt-6">
           <div className="flex items-center space-x-2 text-red-400">
             <AlertTriangle className="h-5 w-5" />
-            <span className="font-medium">Admin Functions</span>
+            <span className="font-medium">Multisig Admin Functions</span>
           </div>
           <p className="text-red-300 mt-2 text-sm">
-            These functions can only be executed by the wallet owner. Use with caution as they affect wallet security
-            and control.
+            These functions modify the multisig contract configuration. Only authorized owners can execute these actions.
           </p>
         </CardContent>
       </Card>
 
-      {/* Set Controller */}
+      {/* Contract Status */}
       <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <Shield className="h-5 w-5 text-blue-500" />
-            <span>Set Controller</span>
-          </CardTitle>
-          <CardDescription className="text-gray-400">Update the wallet controller address</CardDescription>
+          <CardTitle className="text-white">Contract Status</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="controllerAddress" className="text-gray-300">
-              New Controller Address
-            </Label>
-            <Input
-              id="controllerAddress"
-              placeholder="0x742d35Cc6634C0532925a3b8D4C9db96590c6C89"
-              value={controllerAddress}
-              onChange={(e) => setControllerAddress(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
-            />
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-gray-300">Contract is currently:</span>
+              <Badge className={isPaused ? "bg-red-600 text-white" : "bg-green-600 text-white"}>
+                {isPaused ? "Paused" : "Active"}
+              </Badge>
+            </div>
+            <Button
+              onClick={togglePause}
+              disabled={isProcessing}
+              variant={isPaused ? "default" : "destructive"}
+              className={isPaused ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+            >
+              {isProcessing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                isPaused ? "Unpause" : "Pause"
+              )}
+            </Button>
           </div>
-
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={!controllerAddress || isSettingController}
-              >
-                {isSettingController ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Setting Controller...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Set Controller
-                  </>
-                )}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-gray-900 border-gray-800">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-white flex items-center space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <span>Confirm Controller Change</span>
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-gray-400">
-                  You are about to change the wallet controller. This will affect who can execute transactions.
-                  <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-                    <strong>New Controller:</strong> {controllerAddress}
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction onClick={setController} className="bg-blue-600 hover:bg-blue-700 text-white">
-                  Confirm Change
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </CardContent>
       </Card>
 
-      {/* Transfer Ownership */}
+      {/* Current Owners */}
       <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
         <CardHeader>
           <CardTitle className="text-white flex items-center space-x-2">
-            <User className="h-5 w-5 text-yellow-500" />
-            <span>Transfer Ownership</span>
+            <Users className="h-5 w-5 text-blue-500" />
+            <span>Current Owners</span>
           </CardTitle>
-          <CardDescription className="text-gray-400">Transfer wallet ownership to another address</CardDescription>
+          <CardDescription className="text-gray-400">
+            Current multisig owners and their voting power
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent>
+          <div className="space-y-3">
+            {owners.map((owner) => (
+              <div key={owner.address} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-white font-mono text-sm">{truncateAddress(owner.address)}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary" className="bg-blue-600 text-white">
+                    {owner.percentage}%
+                  </Badge>
+                  {!owner.removable && (
+                    <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+                      Protected
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Add Owner */}
+      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center space-x-2">
+            <UserPlus className="h-5 w-5 text-green-500" />
+            <span>Add Owner</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="newOwnerAddress" className="text-gray-300">
-              New Owner Address
+              Owner Address
             </Label>
             <Input
               id="newOwnerAddress"
-              placeholder="0x742d35Cc6634C0532925a3b8D4C9db96590c6C89"
+              placeholder="0x..."
               value={newOwnerAddress}
               onChange={(e) => setNewOwnerAddress(e.target.value)}
               className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="newOwnerPercentage" className="text-gray-300">
+              Voting Power (%)
+            </Label>
+            <Input
+              id="newOwnerPercentage"
+              type="number"
+              placeholder="10"
+              value={newOwnerPercentage}
+              onChange={(e) => setNewOwnerPercentage(e.target.value)}
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            />
+          </div>
+          <Button
+            className="w-full bg-green-600 hover:bg-green-700 text-white"
+            onClick={addOwner}
+            disabled={!newOwnerAddress || !newOwnerPercentage || isProcessing}
+          >
+            {isProcessing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Owner
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
-                disabled={!newOwnerAddress || isTransferringOwnership}
-              >
-                {isTransferringOwnership ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Transferring...
-                  </>
-                ) : (
-                  <>
-                    <User className="h-4 w-4 mr-2" />
-                    Transfer Ownership
-                  </>
-                )}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-gray-900 border-gray-800">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-white flex items-center space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <span>Confirm Ownership Transfer</span>
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-gray-400">
-                  <strong className="text-red-400">WARNING:</strong> You are about to transfer ownership of this wallet.
-                  This action cannot be undone and you will lose admin privileges.
-                  <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-                    <strong>New Owner:</strong> {newOwnerAddress}
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction onClick={transferOwnership} className="bg-red-600 hover:bg-red-700 text-white">
-                  Transfer Ownership
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+      {/* Remove Owner */}
+      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center space-x-2">
+            <UserMinus className="h-5 w-5 text-red-500" />
+            <span>Remove Owner</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="removeOwnerAddress" className="text-gray-300">
+              Owner Address to Remove
+            </Label>
+            <Input
+              id="removeOwnerAddress"
+              placeholder="0x..."
+              value={removeOwnerAddress}
+              onChange={(e) => setRemoveOwnerAddress(e.target.value)}
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            />
+          </div>
+          <Button
+            className="w-full bg-red-600 hover:bg-red-700 text-white"
+            onClick={removeOwner}
+            disabled={!removeOwnerAddress || isProcessing}
+          >
+            {isProcessing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <>
+                <UserMinus className="h-4 w-4 mr-2" />
+                Remove Owner
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Change Required Percentage */}
+      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center space-x-2">
+            <Percent className="h-5 w-5 text-yellow-500" />
+            <span>Change Required Percentage</span>
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            Current requirement: {currentRequiredPercentage}%
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="newRequiredPercentage" className="text-gray-300">
+              New Required Percentage
+            </Label>
+            <Input
+              id="newRequiredPercentage"
+              type="number"
+              placeholder="51"
+              value={newRequiredPercentage}
+              onChange={(e) => setNewRequiredPercentage(e.target.value)}
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            />
+          </div>
+          <Button
+            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white"
+            onClick={changeRequiredPercentage}
+            disabled={!newRequiredPercentage || isProcessing}
+          >
+            {isProcessing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <>
+                <Percent className="h-4 w-4 mr-2" />
+                Change Percentage
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>

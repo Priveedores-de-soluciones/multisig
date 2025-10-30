@@ -1,49 +1,54 @@
-// Contract addresses (replace with your actual deployed contract addresses)
+// Contract addresses (MUST be replaced with your new deployed addresses on Base Sepolia)
 export const CONTRACT_ADDRESSES = {
-  COMPANY_WALLET: "0x3540C2C5CbdFf2e2309195C581f3d4960D5BFd7a",
-  MULTISIG_CONTROLLER: "0x8AA9a0e65352532076dbc09a4D745B7FAA33745B",
-} as const
+  COMPANY_WALLET: "0x0584aa5138E12275212C390E7B398fDb4B1c94B9",
+  MULTISIG_CONTROLLER: "0xb7785eFfD86F90260378d8b7b5a8b4CC6cbe8435",
+} as const;
 
-// Popular token addresses on Ethereum mainnet
+// Popular tokens on Base Sepolia
 export const POPULAR_TOKENS = [
- 
   {
-    name: "Celo Dollar",
-    address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
-    symbol: "cUSD",
+    name: "Ether",
+    address: "0x0000000000000000000000000000000000000000", // Native token address placeholder
+    symbol: "ETH",
     decimals: 18,
   },
   {
-    name: "Celo Euro",
-    address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
-    symbol: "cEUR",
-    decimals: 18,
+    name: "USD Coin (Testnet)",
+    address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia USDC
+    symbol: "USDC",
+    decimals: 6,
   },
-  {
-    name: "Celo",
-    address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
-    symbol: "CELO",
-    decimals: 18,
-  },
-  
-  {
-    name: "Celo Alfajores",
-    symbol: "CELO",
-    address: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
-    decimals: 18,
-  },
-] as const
+] as const;
 
 // Network configurations
 export const NETWORKS = {
-  ALFAJORES: {
-    chainId: 44787,
-    name: "Alfajores Testnet",
-    rpcUrl: "https://alfajores-forno.celo-testnet.org",
+  BASE_SEPOLIA: {
+    chainId: 84532,
+    name: "Base Sepolia",
+    rpcUrl: "https://sepolia.base.org",
   },
-  MAINNET: {
-    chainId: 42220,
-    name: "Celo Mainnet",
-    rpcUrl: "https://forno.celo.org",
+  // You can add Base Mainnet here if needed
+  /*
+  BASE_MAINNET: {
+    chainId: 8453,
+    name: "Base Mainnet",
+    rpcUrl: "https://mainnet.base.org",
   },
-} as const
+  */
+} as const;
+
+// Transaction status
+export const TRANSACTION_STATUS = {
+  PENDING: "pending",
+  CONFIRMED: "confirmed",
+  EXECUTED: "executed",
+  FAILED: "failed",
+} as const;
+
+// Default configuration
+export const DEFAULT_CONFIG = {
+  DEFAULT_GAS_LIMIT: 300000,
+  CONFIRMATION_BLOCKS: 2,
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 1000, // milliseconds
+} as const;

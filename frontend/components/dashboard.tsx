@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Wallet, User, Shield, TrendingUp } from "lucide-react"
+import { RefreshCw, Wallet, User, Shield, TrendingUp, Users } from "lucide-react"
 import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "@/hooks/use-web3"
 import { ethers } from "ethers"
@@ -17,14 +17,15 @@ export function Dashboard() {
   const { toast } = useToast()
   const [balances, setBalances] = useState({
     eth: "0.0",
-    usdt: "0.0",
     usdc: "0.0",
   })
   const [contractInfo, setContractInfo] = useState({
     owner: "",
     controller: "",
+    owners: [] as Array<{ address: string; percentage: string }>,
+    requiredPercentage: 0,
   })
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([])
+  const [pendingTransactions, setPendingTransactions] = useState<any[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const refreshBalances = async () => {
@@ -35,46 +36,71 @@ export function Dashboard() {
       // Get ETH balance
       const ethBalance = await web3Service.getBalance()
 
-      // Get token balances for USDT and USDC
-      const usdtToken = POPULAR_TOKENS.find((t) => t.symbol === "USDT")
+      // Get USDC balance (6 decimals on Base Sepolia)
       const usdcToken = POPULAR_TOKENS.find((t) => t.symbol === "USDC")
-
-      let usdtBalance = "0.0"
       let usdcBalance = "0.0"
 
-      if (usdtToken) {
-        usdtBalance = await web3Service.getTokenBalance(usdtToken.address)
-      }
-
       if (usdcToken) {
-        usdcBalance = await web3Service.getTokenBalance(usdcToken.address)
+        usdcBalance = await web3Service.getTokenBalance(usdcToken.address, usdcToken.decimals)
       }
 
       setBalances({
         eth: ethBalance,
-        usdt: usdtBalance,
         usdc: usdcBalance,
       })
 
       // Get contract info
-      const owner = await web3Service.getOwner()
-      const controller = await web3Service.getController()
+      const [owner, controller, ownersData, requiredPercentage] = await Promise.all([
+        web3Service.getOwner(),
+        web3Service.getController(),
+        web3Service.getOwners(),
+        web3Service.getRequiredPercentage(),
+      ])
+
+      // Format owners data
+      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
+        address: addr,
+        percentage: ownersData.percentages[index].toString(),
+      }))
 
       setContractInfo({
         owner,
         controller,
+        owners: formattedOwners,
+        requiredPercentage,
       })
 
+      // Get pending transactions
+      const txCount = await web3Service.getTransactionCount()
+      const pending = []
+      
+      // Check last 10 transactions for pending ones
+      const startIndex = Math.max(0, txCount - 10)
+      for (let i = startIndex; i < txCount; i++) {
+        const tx = await web3Service.getTransaction(i)
+        if (!tx.executed) {
+          pending.push({
+            id: i,
+            to: tx.to,
+            value: ethers.formatEther(tx.value),
+            confirmations: Number(tx.confirmationCount),
+            isTokenTransfer: tx.isTokenTransfer,
+          })
+        }
+      }
+      
+      setPendingTransactions(pending)
+
       toast({
-        title: "Balances Updated",
-        description: "Latest wallet balances have been fetched",
+        title: "Dashboard Updated",
+        description: "Latest wallet information has been fetched",
         className: "bg-green-600 text-white border-green-700",
       })
     } catch (error: any) {
-      console.error("Error refreshing balances:", error)
+      console.error("Error refreshing dashboard:", error)
       toast({
         title: "Update Failed",
-        description: error.message || "Failed to update balances",
+        description: error.message || "Failed to update dashboard",
         variant: "destructive",
       })
     } finally {
@@ -82,56 +108,16 @@ export function Dashboard() {
     }
   }
 
-  const fetchRecentTransactions = async () => {
-    if (!isConnected) return
-
-    try {
-      // Get recent transactions from events
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const contract = new ethers.Contract(
-        web3Service.getCompanyWalletContract().target as string,
-        web3Service.getCompanyWalletContract().interface,
-        provider,
-      )
-
-      // Get the last 5 TransactionExecuted events
-      const filter = contract.filters.TransactionExecuted()
-      const events = await contract.queryFilter(filter, -10000, "latest")
-
-      const transactions = await Promise.all(
-        events.slice(-5).map(async (event: any) => {
-          const block = await provider.getBlock(event.blockNumber)
-          const timestamp = block ? new Date(Number(block.timestamp) * 1000).toLocaleString() : "Unknown"
-
-          return {
-            id: event.transactionHash,
-            type: "TransactionExecuted",
-            to: event.args[0],
-            value: ethers.formatEther(event.args[1]),
-            token: event.args[2],
-            status: event.args[3] ? "Success" : "Failed",
-            timestamp,
-          }
-        }),
-      )
-
-      setRecentTransactions(transactions.reverse())
-    } catch (error) {
-      console.error("Error fetching transactions:", error)
-    }
-  }
-
   useEffect(() => {
     if (isConnected) {
       refreshBalances()
-      fetchRecentTransactions()
     }
   }, [isConnected])
 
   return (
     <div className="space-y-6">
       {/* Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-300">ETH Balance</CardTitle>
@@ -145,28 +131,17 @@ export function Dashboard() {
 
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">USDT Balance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{formatBalance(balances.usdt)} USDT</div>
-            <p className="text-xs text-gray-500 mt-1">Tether USD</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-900 border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-300">USDC Balance</CardTitle>
             <TrendingUp className="h-4 w-4 text-blue-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">{formatBalance(balances.usdc)} USDC</div>
-            <p className="text-xs text-gray-500 mt-1">USD Coin</p>
+            <p className="text-xs text-gray-500 mt-1">USD Coin (Base Sepolia)</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Contract Info and Refresh */}
+      {/* Contract Info and Multisig Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader>
@@ -202,47 +177,84 @@ export function Dashboard() {
                 {contractInfo.controller ? truncateAddress(contractInfo.controller) : "Loading..."}
               </span>
             </div>
+            <div className="pt-2 border-t border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4 text-green-500" />
+                  <span className="text-gray-300">Required Approval</span>
+                </div>
+                <span className="text-sm text-white">{contractInfo.requiredPercentage}%</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Recent Transactions</CardTitle>
-            <CardDescription className="text-gray-400">Latest wallet activity</CardDescription>
+            <CardTitle className="text-white">Multisig Owners</CardTitle>
+            <CardDescription className="text-gray-400">Current wallet signers</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {recentTransactions.length > 0 ? (
-                recentTransactions.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-white">
-                          {tx.type === "TransactionExecuted" ? "Send" : tx.type}
-                        </span>
-                        <span className="text-xs text-gray-400">{tx.timestamp}</span>
-                      </div>
-                    </div>
+            <div className="space-y-3 max-h-48 overflow-y-auto">
+              {contractInfo.owners.length > 0 ? (
+                contractInfo.owners.map((owner, index) => (
+                  <div key={owner.address} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm text-white">{tx.value} ETH</span>
-                      <Badge
-                        variant={tx.status === "Success" ? "default" : "secondary"}
-                        className={tx.status === "Success" ? "bg-green-600 text-white" : "bg-yellow-600 text-white"}
-                      >
-                        {tx.status}
-                      </Badge>
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm text-white font-mono">
+                        {truncateAddress(owner.address)}
+                      </span>
                     </div>
+                    <Badge variant="secondary" className="bg-gray-700 text-white">
+                      {owner.percentage}%
+                    </Badge>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6">
-                  <p className="text-gray-400">No recent transactions</p>
+                <div className="text-center py-4">
+                  <p className="text-gray-400">Loading owners...</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Transactions */}
+      <Card className="bg-gray-900 border-gray-800">
+        <CardHeader>
+          <CardTitle className="text-white">Pending Transactions</CardTitle>
+          <CardDescription className="text-gray-400">Transactions awaiting multisig approval</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {pendingTransactions.length > 0 ? (
+              pendingTransactions.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-white">
+                      Transaction #{tx.id}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {tx.isTokenTransfer ? "Token Transfer" : "ETH Transfer"} to {truncateAddress(tx.to)}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-white">{tx.value} {tx.isTokenTransfer ? "" : "ETH"}</span>
+                    <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+                      {tx.confirmations} confirmations
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-gray-400">No pending transactions</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

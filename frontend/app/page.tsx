@@ -4,10 +4,13 @@ import { Dashboard } from "@/components/dashboard"
 import { TransactionForm } from "@/components/transaction-form"
 import { TokenManagement } from "@/components/token-management"
 import { AdminSettings } from "@/components/admin-settings"
-import { TransactionHistory } from "@/components/transaction-history"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Wallet, Send, Coins, Settings, History } from "lucide-react"
+// Updated icons to use "List" for the new tab
+import { Wallet, Send, Coins, Settings, List } from "lucide-react"
 import { useWeb3 } from "@/hooks/use-web3"
+
+// Import your new combined component
+import { TransactionManager } from "@/components/transaction"
 
 export default function MultiSigWallet() {
   const { isConnected } = useWeb3()
@@ -35,6 +38,8 @@ export default function MultiSigWallet() {
           </div>
         ) : (
           <Tabs defaultValue="dashboard" className="w-full">
+            
+            {/* Updated TabsList to 5 columns */}
             <TabsList className="grid w-full grid-cols-5 bg-gray-800 border border-gray-700">
               <TabsTrigger value="dashboard" className="flex items-center space-x-2">
                 <Wallet className="h-4 w-4" />
@@ -52,9 +57,11 @@ export default function MultiSigWallet() {
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">Admin</span>
               </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center space-x-2">
-                <History className="h-4 w-4" />
-                <span className="hidden sm:inline">History</span>
+              
+              {/* Replaced "Manager" and "History" with "Transactions" */}
+              <TabsTrigger value="transactions" className="flex items-center space-x-2">
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Transactions</span>
               </TabsTrigger>
             </TabsList>
 
@@ -73,9 +80,10 @@ export default function MultiSigWallet() {
             <TabsContent value="admin" className="mt-6">
               <AdminSettings />
             </TabsContent>
-
-            <TabsContent value="history" className="mt-6">
-              <TransactionHistory />
+            
+            {/* Add the new content tab */}
+            <TabsContent value="transactions" className="mt-6">
+              <TransactionManager />
             </TabsContent>
           </Tabs>
         )}

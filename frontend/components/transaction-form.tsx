@@ -19,10 +19,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Send, AlertTriangle } from "lucide-react"
+import { Send, AlertTriangle, FileText } from "lucide-react"
 import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "@/hooks/use-web3"
 import { truncateAddress } from "@/lib/utils"
+import { POPULAR_TOKENS } from "@/lib/constants"
 
 export function TransactionForm() {
   const { isConnected } = useWeb3()
@@ -40,11 +41,11 @@ export function TransactionForm() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const executeTransaction = async () => {
+  const submitTransaction = async () => {
     if (!isConnected) {
       toast({
         title: "Wallet Not Connected",
-        description: "Please connect your wallet to execute transactions",
+        description: "Please connect your wallet to submit transactions",
         variant: "destructive",
       })
       return
@@ -52,26 +53,38 @@ export function TransactionForm() {
 
     setIsSubmitting(true)
     try {
-      const tx = await web3Service.executeTransaction(
+      // Get token decimals if it's a token transfer
+      let tokenDecimals = 18
+      if (formData.isTokenTransfer && formData.tokenAddress) {
+        const token = POPULAR_TOKENS.find(
+          t => t.address.toLowerCase() === formData.tokenAddress.toLowerCase()
+        )
+        if (token) {
+          tokenDecimals = token.decimals
+        }
+      }
+
+      const result = await web3Service.submitTransaction(
         formData.to,
         formData.value,
         formData.isTokenTransfer,
         formData.isTokenTransfer ? formData.tokenAddress : undefined,
         formData.data || "0x",
+        tokenDecimals
       )
 
       toast({
-        title: "Transaction Submitted",
-        description: `Transaction hash: ${truncateAddress(tx.hash)}`,
+        title: "Transaction Submitted to MultiSig",
+        description: `Transaction ID: ${result.transactionId?.toString() || "Pending"}`,
         className: "bg-blue-600 text-white border-blue-700",
       })
 
       // Wait for transaction to be mined
-      const receipt = await tx.wait()
+      const receipt = await result.tx.wait()
 
       toast({
-        title: "Transaction Executed",
-        description: `Successfully sent ${formData.value} ${formData.isTokenTransfer ? "tokens" : "ETH"} to ${truncateAddress(formData.to)}`,
+        title: "Transaction Proposal Created",
+        description: `Transaction #${result.transactionId?.toString() || "N/A"} has been submitted for approval`,
         className: "bg-green-600 text-white border-green-700",
       })
 
@@ -87,7 +100,7 @@ export function TransactionForm() {
       console.error("Transaction error:", error)
       toast({
         title: "Transaction Failed",
-        description: error.message || "Failed to execute transaction. Please try again.",
+        description: error.message || "Failed to submit transaction. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -101,12 +114,20 @@ export function TransactionForm() {
     <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle className="text-white flex items-center space-x-2">
-          <Send className="h-5 w-5 text-blue-500" />
-          <span>Execute Transaction</span>
+          <FileText className="h-5 w-5 text-blue-500" />
+          <span>Submit Transaction</span>
         </CardTitle>
-        <CardDescription className="text-gray-400">Send ETH or tokens from the wallet</CardDescription>
+        <CardDescription className="text-gray-400">
+          Create a new transaction proposal for the multisig wallet
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+          <p className="text-sm text-blue-300">
+            <strong>Note:</strong> Transactions require approval from multisig owners before execution.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="to" className="text-gray-300">
             Recipient Address
@@ -127,6 +148,7 @@ export function TransactionForm() {
           <Input
             id="value"
             type="number"
+            step="0.000001"
             placeholder="0.0"
             value={formData.value}
             onChange={(e) => handleInputChange("value", e.target.value)}
@@ -158,6 +180,19 @@ export function TransactionForm() {
               onChange={(e) => handleInputChange("tokenAddress", e.target.value)}
               className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
             />
+            <div className="flex flex-wrap gap-2 mt-2">
+              {POPULAR_TOKENS.filter(t => t.address !== "0x0000000000000000000000000000000000000000").map((token) => (
+                <Button
+                  key={token.symbol}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleInputChange("tokenAddress", token.address)}
+                  className="border-gray-700 hover:bg-gray-800 text-gray-300"
+                >
+                  {token.symbol}
+                </Button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -184,12 +219,12 @@ export function TransactionForm() {
               {isSubmitting ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Executing...
+                  Submitting...
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Execute Transaction
+                  Submit Transaction
                 </>
               )}
             </Button>
@@ -197,11 +232,11 @@ export function TransactionForm() {
           <AlertDialogContent className="bg-gray-900 border-gray-800">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-white flex items-center space-x-2">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <span>Confirm Transaction</span>
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <span>Confirm Transaction Submission</span>
               </AlertDialogTitle>
               <AlertDialogDescription className="text-gray-400">
-                You are about to execute a transaction. Please review the details:
+                You are about to submit a transaction proposal to the multisig wallet:
                 <div className="mt-4 p-4 bg-gray-800 rounded-lg space-y-2">
                   <div>
                     <strong>To:</strong> {formData.to}
@@ -215,14 +250,17 @@ export function TransactionForm() {
                     </div>
                   )}
                 </div>
+                <p className="mt-4 text-yellow-400">
+                  This transaction will require approval from multisig owners before execution.
+                </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700">
                 Cancel
               </AlertDialogCancel>
-              <AlertDialogAction onClick={executeTransaction} className="bg-red-600 hover:bg-red-700 text-white">
-                Confirm & Execute
+              <AlertDialogAction onClick={submitTransaction} className="bg-blue-600 hover:bg-blue-700 text-white">
+                Submit Proposal
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
