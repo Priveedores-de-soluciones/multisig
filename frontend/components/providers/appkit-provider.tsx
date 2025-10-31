@@ -52,7 +52,7 @@ createAppKit({
   projectId,
   features: {
     analytics: true,
-    email: false,
+    email: true,
     socials: ['google', 'github', 'apple', 'facebook', 'x', 'discord', 'farcaster'], // Set to true if you want social logins
   }
 })
