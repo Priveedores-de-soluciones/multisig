@@ -1,6 +1,6 @@
 // lib/web3.ts
 import { ethers } from "ethers"
-import { CONTRACT_ADDRESSES, NETWORKS } from "./constants"
+import { CONTRACT_ADDRESSES } from "./constants"
 import { COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
 
 // 1. Updated interface to include initiator
@@ -31,40 +31,38 @@ export interface Owner {
 }
 
 export class Web3Service {
-  private provider: ethers.BrowserProvider | null = null
   private signer: ethers.Signer | null = null
 
-  async connect(): Promise<string> {
-    if (typeof window === "undefined" || typeof window.ethereum === "undefined") {
-      throw new Error("MetaMask is not installed")
-    }
-
-    try {
-      this.provider = new ethers.BrowserProvider(window.ethereum)
-      
-      // Request access to accounts if not already granted
-      await this.provider.send("eth_requestAccounts", [])
-      
-      // Switch to Base Sepolia if not already on it
-      await this.switchToBaseSepolia()
-      
-      this.signer = await this.provider.getSigner()
-
-      return await this.signer.getAddress()
-    } catch (error: any) {
-      // Reset provider and signer on error
-      this.provider = null
-      this.signer = null
-      throw new Error(`Failed to connect wallet: ${error.message}`)
+  /**
+   * NEW: This method allows our AppKitProvider to inject the signer
+   * when the user connects their wallet.
+   */
+  public async setSigner(signer: ethers.Signer | null) {
+    this.signer = signer
+    if (signer) {
+      console.log("Web3Service signer updated:", await signer.getAddress())
+    } else {
+      console.log("Web3Service signer cleared.")
     }
   }
-  
+
+  // Helper to get the provider from the signer
+  private getProvider(): ethers.Provider {
+    if (!this.signer?.provider) {
+      throw new Error("Wallet not connected or provider not available")
+    }
+    return this.signer.provider
+  }
+
+  // DELETED: connect(), switchToBaseSepolia(), disconnect(), isConnected(), getCurrentAddress()
+  // AppKit now handles all of these.
+
   async getAllTransactions(): Promise<FullTransaction[]> {
     if (!this.signer) throw new Error("Wallet not connected")
 
     const contract = this.getMultiSigControllerContract()
     const userAddress = await this.signer.getAddress()
-    
+
     let transactionCount: bigint
     try {
       transactionCount = await contract.getTransactionCount()
@@ -112,66 +110,9 @@ export class Web3Service {
       .filter((tx): tx is FullTransaction => tx !== null)
       .sort((a, b) => Number(b.id) - Number(a.id))
   }
-  
-  async switchToBaseSepolia(): Promise<void> {
-    if (!this.provider) return
-
-    try {
-      const network = await this.provider.getNetwork()
-      const currentChainId = Number(network.chainId)
-      
-      if (currentChainId !== NETWORKS.BASE_SEPOLIA.chainId) {
-        try {
-          // Try to switch to Base Sepolia
-          await this.provider.send("wallet_switchEthereumChain", [
-            { chainId: `0x${NETWORKS.BASE_SEPOLIA.chainId.toString(16)}` }
-          ])
-        } catch (switchError: any) {
-          // If the chain is not added, add it
-          if (switchError.code === 4902) {
-            await this.provider.send("wallet_addEthereumChain", [
-              {
-                chainId: `0x${NETWORKS.BASE_SEPOLIA.chainId.toString(16)}`,
-                chainName: NETWORKS.BASE_SEPOLIA.name,
-                nativeCurrency: {
-                  name: "Ether",
-                  symbol: "ETH",
-                  decimals: 18
-                },
-                rpcUrls: [NETWORKS.BASE_SEPOLIA.rpcUrl],
-                blockExplorerUrls: ["https://sepolia.basescan.org"]
-              }
-            ])
-          } else {
-            throw switchError
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to switch to Base Sepolia:", error)
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    this.provider = null
-    this.signer = null
-  }
-
-  isConnected(): boolean {
-    return this.provider !== null && this.signer !== null
-  }
-
-  async getCurrentAddress(): Promise<string | null> {
-    if (!this.signer) return null
-    try {
-      return await this.signer.getAddress()
-    } catch (error) {
-      return null
-    }
-  }
 
   async validateContracts(): Promise<{ companyWallet: boolean; multiSigController: boolean }> {
-    if (!this.provider) throw new Error("Provider not available")
+    const provider = this.getProvider()
     
     const results = {
       companyWallet: false,
@@ -181,13 +122,13 @@ export class Web3Service {
     try {
       // Check if company wallet contract exists
       if (CONTRACT_ADDRESSES.COMPANY_WALLET && ethers.isAddress(CONTRACT_ADDRESSES.COMPANY_WALLET)) {
-        const code = await this.provider.getCode(CONTRACT_ADDRESSES.COMPANY_WALLET)
+        const code = await provider.getCode(CONTRACT_ADDRESSES.COMPANY_WALLET)
         results.companyWallet = code !== "0x"
       }
       
       // Check if multisig controller contract exists
       if (CONTRACT_ADDRESSES.MULTISIG_CONTROLLER && ethers.isAddress(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)) {
-        const code = await this.provider.getCode(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)
+        const code = await provider.getCode(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)
         results.multiSigController = code !== "0x"
       } 
     } catch (error) {
@@ -198,10 +139,10 @@ export class Web3Service {
   }
 
   async getNetworkInfo(): Promise<{ chainId: number; name: string } | null> {
-    if (!this.provider) return null
+    const provider = this.getProvider()
     
     try {
-      const network = await this.provider.getNetwork()
+      const network = await provider.getNetwork()
       return {
         chainId: Number(network.chainId),
         name: network.name
@@ -646,10 +587,10 @@ export class Web3Service {
 
   // Utility method to wait for transaction confirmation
   async waitForTransaction(txHash: string): Promise<ethers.TransactionReceipt | null> {
-    if (!this.provider) throw new Error("Provider not available")
+    const provider = this.getProvider()
     
     try {
-      return await this.provider.waitForTransaction(txHash)
+      return await provider.waitForTransaction(txHash)
     } catch (error: any) {
       throw new Error(`Failed to wait for transaction: ${error.message}`)
     }

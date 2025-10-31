@@ -1,10 +1,13 @@
+// app/layout.tsx
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import { AppKitProvider } from "@/components/providers/appkit-provider" // Import new provider
 
 const inter = Inter({ subsets: ["latin"] })
+
 
 export const metadata: Metadata = {
   title: "MultiSig Wallet",
@@ -15,6 +18,7 @@ export const metadata: Metadata = {
     generator: 'v0.dev'
 }
 
+
 export default function RootLayout({
   children,
 }: {
@@ -23,7 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={inter.className}>
-        {children}
+        <AppKitProvider> {/* Wrap children */}
+          {children}
+        </AppKitProvider>
         <Toaster />
       </body>
     </html>
