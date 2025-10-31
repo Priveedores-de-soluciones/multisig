@@ -22,7 +22,6 @@ export function Dashboard() {
   const [contractInfo, setContractInfo] = useState({
     owner: "",
     controller: "",
-    // --- UPDATED: Added 'name' to the owners array type ---
     owners: [] as Array<{ address: string; name: string; percentage: string }>,
     requiredPercentage: 0,
   })
@@ -30,7 +29,11 @@ export function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const refreshBalances = async () => {
-    if (!isConnected) return
+    // Check if we're actually ready to make calls
+    if (!isConnected || !web3Service.hasSigner()) {
+      console.log("Skipping refresh - wallet not ready")
+      return
+    }
 
     setIsRefreshing(true)
     try {
@@ -58,13 +61,11 @@ export function Dashboard() {
         web3Service.getRequiredPercentage(),
       ])
 
-      // --- UPDATED: Map the 'names' array from ownersData ---
       const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
         address: addr,
-        name: ownersData.names[index], // <-- Added this
+        name: ownersData.names[index],
         percentage: ownersData.percentages[index].toString(),
       }))
-      // --- END UPDATE ---
 
       setContractInfo({
         owner,
@@ -113,7 +114,14 @@ export function Dashboard() {
 
   useEffect(() => {
     if (isConnected) {
-      refreshBalances()
+      // Add a small delay to ensure the signer is fully set up
+      const timer = setTimeout(() => {
+        if (web3Service.hasSigner()) {
+          refreshBalances()
+        }
+      }, 100)
+      
+      return () => clearTimeout(timer)
     }
   }, [isConnected])
 
@@ -202,7 +210,6 @@ export function Dashboard() {
               {contractInfo.owners.length > 0 ? (
                 contractInfo.owners.map((owner, index) => (
                   <div key={owner.address} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
-                    {/* --- UPDATED: Display owner's name and address --- */}
                     <div className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <div className="flex flex-col">
@@ -214,7 +221,6 @@ export function Dashboard() {
                         </span>
                       </div>
                     </div>
-                    {/* --- END UPDATE --- */}
                     <Badge variant="secondary" className="bg-gray-700 text-white">
                       {owner.percentage}%
                     </Badge>

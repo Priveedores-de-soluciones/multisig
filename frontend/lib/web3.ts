@@ -45,7 +45,10 @@ export class Web3Service {
       console.log("Web3Service signer cleared.")
     }
   }
-
+  public hasSigner(): boolean {
+  return this.signer !== null
+}
+  
   // Helper to get the provider from the signer
   private getProvider(): ethers.Provider {
     if (!this.signer?.provider) {
@@ -188,8 +191,6 @@ export class Web3Service {
 
   // Company Wallet Methods
   async getBalance(): Promise<string> {
-    if (!this.provider) throw new Error("Provider not available")
-    
     try {
       const contract = this.getCompanyWalletContract()
       const balance = await contract.getBalance()
