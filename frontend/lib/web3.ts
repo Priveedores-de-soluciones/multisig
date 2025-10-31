@@ -222,6 +222,29 @@ export class Web3Service {
     return new ethers.Contract(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER, MULTISIG_CONTROLLER_ABI, this.signer)
   }
 
+  // --- Helper to parse TransactionSubmitted event ---
+  private async getTransactionIdFromReceipt(
+    contract: ethers.Contract,
+    receipt: ethers.TransactionReceipt
+  ): Promise<bigint | undefined> {
+    let transactionId: bigint | undefined
+    if (receipt && receipt.logs) {
+      for (const log of receipt.logs) {
+        try {
+          const parsed = contract.interface.parseLog({
+            topics: log.topics as string[],
+            data: log.data
+          })
+          if (parsed?.name === "TransactionSubmitted") {
+            transactionId = parsed.args[0]
+            break
+          }
+        } catch {}
+      }
+    }
+    return transactionId
+  }
+
   // Company Wallet Methods
   async getBalance(): Promise<string> {
     if (!this.provider) throw new Error("Provider not available")
@@ -302,23 +325,7 @@ export class Web3Service {
       
       // Wait for transaction receipt to get the transaction ID from events
       const receipt = await tx.wait()
-      let transactionId: bigint | undefined
-      
-      if (receipt && receipt.logs) {
-        // Find the TransactionSubmitted event
-        for (const log of receipt.logs) {
-          try {
-            const parsed = contract.interface.parseLog({
-              topics: log.topics as string[],
-              data: log.data
-            })
-            if (parsed?.name === "TransactionSubmitted") {
-              transactionId = parsed.args[0]
-              break
-            }
-          } catch {}
-        }
-      }
+      const transactionId = await this.getTransactionIdFromReceipt(contract, receipt)
       
       return { tx, transactionId }
     } catch (error: any) {
@@ -417,13 +424,14 @@ export class Web3Service {
     }
   }
 
-  async getOwners(): Promise<{ addresses: string[]; percentages: bigint[]; removables: boolean[] }> {
+  async getOwners(): Promise<{ addresses: string[]; names: string[]; percentages: bigint[]; removables: boolean[] }> {
     try {
       const contract = this.getMultiSigControllerContract()
       const result = await contract.getOwners()
       
       return {
         addresses: result.addresses,
+        names: result.names, // Added per ABI
         percentages: result.percentages,
         removables: result.removables
       }
@@ -482,42 +490,132 @@ export class Web3Service {
     }
   }
 
-  // Admin methods (require appropriate permissions)
-  async addOwner(newOwner: string, percentage: number): Promise<ethers.ContractTransactionResponse> {
+  // --- NEW: Added view functions from ABI ---
+  async getDeployer(): Promise<string> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.deployer()
+    } catch (error: any) {
+      throw new Error(`Failed to get deployer: ${error.message}`)
+    }
+  }
+
+  async getExpiryPeriod(): Promise<bigint> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.expiryPeriod()
+    } catch (error: any) {
+      throw new Error(`Failed to get expiry period: ${error.message}`)
+    }
+  }
+
+  async getOwnerCount(): Promise<bigint> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.getOwnerCount()
+    } catch (error: any) {
+      throw new Error(`Failed to get owner count: ${error.message}`)
+    }
+  }
+
+  async getMinOwners(): Promise<bigint> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.minOwners()
+    } catch (error: any) {
+      throw new Error(`Failed to get min owners: ${error.message}`)
+    }
+  }
+
+  async getTimelockPeriod(): Promise<bigint> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.timelockPeriod()
+    } catch (error: any) {
+      throw new Error(`Failed to get timelock period: ${error.message}`)
+    }
+  }
+  
+  async getCompanyWalletAddress(): Promise<string> {
+    try {
+      const contract = this.getMultiSigControllerContract()
+      return await contract.companyWallet()
+    } catch (error: any) {
+      throw new Error(`Failed to get company wallet address: ${error.message}`)
+    }
+  }
+  // --- END NEW ---
+
+  // --- Admin methods (UPDATED to submit proposals) ---
+
+  /**
+   * Submits a proposal to add a new owner.
+   */
+  async submitAddOwner(
+    newOwner: string,
+    name: string,
+    percentage: number
+  ): Promise<{ tx: ethers.ContractTransactionResponse; transactionId?: bigint }> {
     if (!ethers.isAddress(newOwner)) {
       throw new Error("Invalid owner address")
     }
     
     try {
       const contract = this.getMultiSigControllerContract()
-      return await contract.addOwner(newOwner, percentage)
+      const tx = await contract.submitAddOwner(newOwner, name, percentage)
+      
+      const receipt = await tx.wait()
+      const transactionId = await this.getTransactionIdFromReceipt(contract, receipt)
+      
+      return { tx, transactionId }
     } catch (error: any) {
-      throw new Error(`Failed to add owner: ${error.message}`)
+      throw new Error(`Failed to submit add owner proposal: ${error.message}`)
     }
   }
 
-  async removeOwner(ownerToRemove: string): Promise<ethers.ContractTransactionResponse> {
+  /**
+   * Submits a proposal to remove an owner.
+   */
+  async submitRemoveOwner(
+    ownerToRemove: string
+  ): Promise<{ tx: ethers.ContractTransactionResponse; transactionId?: bigint }> {
     if (!ethers.isAddress(ownerToRemove)) {
       throw new Error("Invalid owner address")
     }
     
     try {
       const contract = this.getMultiSigControllerContract()
-      return await contract.removeOwner(ownerToRemove)
+      const tx = await contract.submitRemoveOwner(ownerToRemove)
+      
+      const receipt = await tx.wait()
+      const transactionId = await this.getTransactionIdFromReceipt(contract, receipt)
+      
+      return { tx, transactionId }
     } catch (error: any) {
-      throw new Error(`Failed to remove owner: ${error.message}`)
+      throw new Error(`Failed to submit remove owner proposal: ${error.message}`)
     }
   }
 
-  async changeRequiredPercentage(newPercentage: number): Promise<ethers.ContractTransactionResponse> {
+  /**
+   * Submits a proposal to change the required confirmation percentage.
+   */
+  async submitChangeRequiredPercentage(
+    newPercentage: number
+  ): Promise<{ tx: ethers.ContractTransactionResponse; transactionId?: bigint }> {
     try {
       const contract = this.getMultiSigControllerContract()
-      return await contract.changeRequiredPercentage(newPercentage)
+      const tx = await contract.submitChangeRequiredPercentage(newPercentage)
+      
+      const receipt = await tx.wait()
+      const transactionId = await this.getTransactionIdFromReceipt(contract, receipt)
+      
+      return { tx, transactionId }
     } catch (error: any) {
-      throw new Error(`Failed to change required percentage: ${error.message}`)
+      throw new Error(`Failed to submit change required percentage proposal: ${error.message}`)
     }
   }
 
+  // --- Direct Admin methods (Pause/Unpause are still direct) ---
   async pause(): Promise<ethers.ContractTransactionResponse> {
     try {
       const contract = this.getMultiSigControllerContract()

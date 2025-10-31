@@ -1,7 +1,7 @@
 // Contract addresses (MUST be replaced with your new deployed addresses on Base Sepolia)
 export const CONTRACT_ADDRESSES = {
   COMPANY_WALLET: "0x0584aa5138E12275212C390E7B398fDb4B1c94B9",
-  MULTISIG_CONTROLLER: "0xb7785eFfD86F90260378d8b7b5a8b4CC6cbe8435",
+  MULTISIG_CONTROLLER: "0x20da0d68bb461e1Dbb1e148dD1189b652B10b69E",
 } as const;
 
 // Popular tokens on Base Sepolia

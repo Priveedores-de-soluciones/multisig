@@ -12,9 +12,19 @@ export const MULTISIG_CONTROLLER_ABI = [
 				"type": "address"
 			},
 			{
+				"internalType": "string",
+				"name": "_ceoName",
+				"type": "string"
+			},
+			{
 				"internalType": "address",
 				"name": "_cto",
 				"type": "address"
+			},
+			{
+				"internalType": "string",
+				"name": "_ctoName",
+				"type": "string"
 			}
 		],
 		"stateMutability": "nonpayable",
@@ -66,6 +76,12 @@ export const MULTISIG_CONTROLLER_ABI = [
 				"internalType": "address",
 				"name": "owner",
 				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
 			},
 			{
 				"indexed": false,
@@ -223,37 +239,6 @@ export const MULTISIG_CONTROLLER_ABI = [
 		"type": "event"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newOwner",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "percentage",
-				"type": "uint256"
-			}
-		],
-		"name": "addOwner",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "newPercentage",
-				"type": "uint256"
-			}
-		],
-		"name": "changeRequiredPercentage",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "companyWallet",
 		"outputs": [
@@ -352,6 +337,11 @@ export const MULTISIG_CONTROLLER_ABI = [
 				"internalType": "address[]",
 				"name": "addresses",
 				"type": "address[]"
+			},
+			{
+				"internalType": "string[]",
+				"name": "names",
+				"type": "string[]"
 			},
 			{
 				"internalType": "uint256[]",
@@ -548,6 +538,11 @@ export const MULTISIG_CONTROLLER_ABI = [
 				"type": "address"
 			},
 			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
 				"internalType": "uint256",
 				"name": "percentage",
 				"type": "uint256"
@@ -605,19 +600,6 @@ export const MULTISIG_CONTROLLER_ABI = [
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "ownerToRemove",
-				"type": "address"
-			}
-		],
-		"name": "removeOwner",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "requiredPercentage",
 		"outputs": [
@@ -646,13 +628,29 @@ export const MULTISIG_CONTROLLER_ABI = [
 	{
 		"inputs": [
 			{
+				"internalType": "address",
+				"name": "newOwner",
+				"type": "address"
+			},
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
 				"internalType": "uint256",
-				"name": "newPeriod",
+				"name": "percentage",
 				"type": "uint256"
 			}
 		],
-		"name": "setExpiryPeriod",
-		"outputs": [],
+		"name": "submitAddOwner",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
@@ -660,25 +658,37 @@ export const MULTISIG_CONTROLLER_ABI = [
 		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "newMinOwners",
+				"name": "newPercentage",
 				"type": "uint256"
 			}
 		],
-		"name": "setMinOwners",
-		"outputs": [],
+		"name": "submitChangeRequiredPercentage",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
 		"inputs": [
 			{
+				"internalType": "address",
+				"name": "ownerToRemove",
+				"type": "address"
+			}
+		],
+		"name": "submitRemoveOwner",
+		"outputs": [
+			{
 				"internalType": "uint256",
-				"name": "newPeriod",
+				"name": "",
 				"type": "uint256"
 			}
 		],
-		"name": "setTimelockPeriod",
-		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
@@ -725,7 +735,7 @@ export const MULTISIG_CONTROLLER_ABI = [
 		"inputs": [],
 		"name": "test",
 		"outputs": [],
-		"stateMutability": "nonpayable",
+		"stateMutability": "pure",
 		"type": "function"
 	},
 	{

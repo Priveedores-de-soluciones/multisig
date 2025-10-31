@@ -22,7 +22,8 @@ export function Dashboard() {
   const [contractInfo, setContractInfo] = useState({
     owner: "",
     controller: "",
-    owners: [] as Array<{ address: string; percentage: string }>,
+    // --- UPDATED: Added 'name' to the owners array type ---
+    owners: [] as Array<{ address: string; name: string; percentage: string }>,
     requiredPercentage: 0,
   })
   const [pendingTransactions, setPendingTransactions] = useState<any[]>([])
@@ -57,11 +58,13 @@ export function Dashboard() {
         web3Service.getRequiredPercentage(),
       ])
 
-      // Format owners data
+      // --- UPDATED: Map the 'names' array from ownersData ---
       const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
         address: addr,
+        name: ownersData.names[index], // <-- Added this
         percentage: ownersData.percentages[index].toString(),
       }))
+      // --- END UPDATE ---
 
       setContractInfo({
         owner,
@@ -199,12 +202,19 @@ export function Dashboard() {
               {contractInfo.owners.length > 0 ? (
                 contractInfo.owners.map((owner, index) => (
                   <div key={owner.address} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                    {/* --- UPDATED: Display owner's name and address --- */}
                     <div className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-sm text-white font-mono">
-                        {truncateAddress(owner.address)}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm text-white font-medium">
+                          {owner.name}
+                        </span>
+                        <span className="text-xs text-gray-400 font-mono">
+                          {truncateAddress(owner.address)}
+                        </span>
+                      </div>
                     </div>
+                    {/* --- END UPDATE --- */}
                     <Badge variant="secondary" className="bg-gray-700 text-white">
                       {owner.percentage}%
                     </Badge>

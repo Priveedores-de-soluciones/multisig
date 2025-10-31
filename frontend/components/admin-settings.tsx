@@ -16,6 +16,7 @@ export function AdminSettings() {
   const { isConnected, walletAddress } = useWeb3()
   const [owners, setOwners] = useState<any[]>([])
   const [newOwnerAddress, setNewOwnerAddress] = useState("")
+  const [newOwnerName, setNewOwnerName] = useState("") // <-- ADDED
   const [newOwnerPercentage, setNewOwnerPercentage] = useState("")
   const [removeOwnerAddress, setRemoveOwnerAddress] = useState("")
   const [newRequiredPercentage, setNewRequiredPercentage] = useState("")
@@ -24,32 +25,36 @@ export function AdminSettings() {
   const [isProcessing, setIsProcessing] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    const fetchContractInfo = async () => {
-      if (!isConnected) return
+  const fetchContractInfo = async () => {
+    if (!isConnected) return
 
-      try {
-        const [ownersData, reqPercentage, pausedStatus] = await Promise.all([
-          web3Service.getOwners(),
-          web3Service.getRequiredPercentage(),
-          web3Service.isPaused(),
-        ])
+    try {
+      const [ownersData, reqPercentage, pausedStatus] = await Promise.all([
+        web3Service.getOwners(),
+        web3Service.getRequiredPercentage(),
+        web3Service.isPaused(),
+      ])
 
-        const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
-          address: addr,
-          percentage: Number(ownersData.percentages[index]),
-          removable: ownersData.removables[index],
-        }))
+      // Updated to include 'names' from the new getOwners response
+      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
+        address: addr,
+        name: ownersData.names[index], // <-- ADDED
+        percentage: Number(ownersData.percentages[index]),
+        removable: ownersData.removables[index],
+      }))
 
-        setOwners(formattedOwners)
-        setCurrentRequiredPercentage(reqPercentage)
-        setIsPaused(pausedStatus)
-      } catch (error) {
-        console.error("Error fetching contract info:", error)
-      }
+      setOwners(formattedOwners)
+      setCurrentRequiredPercentage(reqPercentage)
+      setIsPaused(pausedStatus)
+    } catch (error) {
+      console.error("Error fetching contract info:", error)
     }
-
-    fetchContractInfo()
+  }
+  
+  useEffect(() => {
+    if (isConnected) {
+      fetchContractInfo()
+    }
   }, [isConnected])
 
   const addOwner = async () => {
@@ -64,37 +69,39 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      const tx = await web3Service.addOwner(newOwnerAddress, Number.parseInt(newOwnerPercentage))
+      // --- UPDATED ---
+      // Call the new submitAddOwner function
+      const result = await web3Service.submitAddOwner(
+        newOwnerAddress,
+        newOwnerName,
+        Number.parseInt(newOwnerPercentage)
+      )
 
       toast({
-        title: "Transaction Submitted",
-        description: `Adding owner ${truncateAddress(newOwnerAddress)}...`,
+        title: "Proposal Submitted",
+        description: `Submitting proposal to add owner ${truncateAddress(newOwnerAddress)}. TX ID: ${result.transactionId?.toString() || 'N/A'}`,
         className: "bg-blue-600 text-white border-blue-700",
       })
 
-      await tx.wait()
+      await result.tx.wait()
 
       toast({
-        title: "Owner Added",
-        description: `Successfully added ${truncateAddress(newOwnerAddress)} with ${newOwnerPercentage}% voting power`,
+        title: "Proposal Created",
+        description: `Proposal to add ${truncateAddress(newOwnerAddress)} has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
+      // --- END UPDATE ---
 
       setNewOwnerAddress("")
+      setNewOwnerName("") // <-- ADDED
       setNewOwnerPercentage("")
       
-      // Refresh owners list
-      const ownersData = await web3Service.getOwners()
-      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
-        address: addr,
-        percentage: Number(ownersData.percentages[index]),
-        removable: ownersData.removables[index],
-      }))
-      setOwners(formattedOwners)
+      // Removed optimistic refresh. List will update when proposal is executed.
+      
     } catch (error: any) {
       console.error("Add owner error:", error)
       toast({
-        title: "Failed to Add Owner",
+        title: "Failed to Submit Proposal", // <-- UPDATED
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -115,36 +122,33 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      const tx = await web3Service.removeOwner(removeOwnerAddress)
+      // --- UPDATED ---
+      // Call the new submitRemoveOwner function
+      const result = await web3Service.submitRemoveOwner(removeOwnerAddress)
 
       toast({
-        title: "Transaction Submitted",
-        description: `Removing owner ${truncateAddress(removeOwnerAddress)}...`,
+        title: "Proposal Submitted",
+        description: `Submitting proposal to remove owner ${truncateAddress(removeOwnerAddress)}. TX ID: ${result.transactionId?.toString() || 'N/A'}`,
         className: "bg-blue-600 text-white border-blue-700",
       })
 
-      await tx.wait()
+      await result.tx.wait()
 
       toast({
-        title: "Owner Removed",
-        description: `Successfully removed ${truncateAddress(removeOwnerAddress)}`,
+        title: "Proposal Created",
+        description: `Proposal to remove ${truncateAddress(removeOwnerAddress)} has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
+      // --- END UPDATE ---
 
       setRemoveOwnerAddress("")
       
-      // Refresh owners list
-      const ownersData = await web3Service.getOwners()
-      const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
-        address: addr,
-        percentage: Number(ownersData.percentages[index]),
-        removable: ownersData.removables[index],
-      }))
-      setOwners(formattedOwners)
+      // Removed optimistic refresh.
+
     } catch (error: any) {
       console.error("Remove owner error:", error)
       toast({
-        title: "Failed to Remove Owner",
+        title: "Failed to Submit Proposal", // <-- UPDATED
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -165,28 +169,33 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      const tx = await web3Service.changeRequiredPercentage(Number.parseInt(newRequiredPercentage))
+      // --- UPDATED ---
+      // Call the new submitChangeRequiredPercentage function
+      const result = await web3Service.submitChangeRequiredPercentage(Number.parseInt(newRequiredPercentage))
 
       toast({
-        title: "Transaction Submitted",
-        description: `Changing required percentage to ${newRequiredPercentage}%...`,
+        title: "Proposal Submitted",
+        description: `Submitting proposal to change percentage to ${newRequiredPercentage}%. TX ID: ${result.transactionId?.toString() || 'N/A'}`,
         className: "bg-blue-600 text-white border-blue-700",
       })
 
-      await tx.wait()
+      await result.tx.wait()
 
       toast({
-        title: "Percentage Updated",
-        description: `Required approval percentage changed to ${newRequiredPercentage}%`,
+        title: "Proposal Created",
+        description: `Proposal to change percentage to ${newRequiredPercentage}% has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
+      // --- END UPDATE ---
 
       setNewRequiredPercentage("")
-      setCurrentRequiredPercentage(Number.parseInt(newRequiredPercentage))
+      
+      // Removed optimistic state update.
+
     } catch (error: any) {
       console.error("Change percentage error:", error)
       toast({
-        title: "Failed to Change Percentage",
+        title: "Failed to Submit Proposal", // <-- UPDATED
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -207,6 +216,7 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
+      // Pause/Unpause are direct calls, not proposals
       const tx = await (isPaused ? web3Service.unpause() : web3Service.pause())
 
       toast({
@@ -258,7 +268,9 @@ export function AdminSettings() {
             <span className="font-medium">Multisig Admin Functions</span>
           </div>
           <p className="text-red-300 mt-2 text-sm">
-            These functions modify the multisig contract configuration. Only authorized owners can execute these actions.
+            {/* UPDATED description */}
+            These functions submit **proposals** to modify the multisig contract.
+            Proposals must be approved and executed in the Transaction Manager.
           </p>
         </CardContent>
       </Card>
@@ -309,7 +321,9 @@ export function AdminSettings() {
               <div key={owner.address} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-white font-mono text-sm">{truncateAddress(owner.address)}</span>
+                  {/* ADDED name display */}
+                  <span className="text-white font-medium">{owner.name}</span>
+                  <span className="text-gray-400 font-mono text-sm">{truncateAddress(owner.address)}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Badge variant="secondary" className="bg-blue-600 text-white">
@@ -332,7 +346,7 @@ export function AdminSettings() {
         <CardHeader>
           <CardTitle className="text-white flex items-center space-x-2">
             <UserPlus className="h-5 w-5 text-green-500" />
-            <span>Add Owner</span>
+            <span>Submit Add Owner Proposal</span> {/* UPDATED */}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -348,6 +362,20 @@ export function AdminSettings() {
               className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
             />
           </div>
+          {/* --- ADDED NAME FIELD --- */}
+          <div className="space-y-2">
+            <Label htmlFor="newOwnerName" className="text-gray-300">
+              Owner Name
+            </Label>
+            <Input
+              id="newOwnerName"
+              placeholder="e.g. CEO, CTO, etc."
+              value={newOwnerName}
+              onChange={(e) => setNewOwnerName(e.target.value)}
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            />
+          </div>
+          {/* --- END --- */}
           <div className="space-y-2">
             <Label htmlFor="newOwnerPercentage" className="text-gray-300">
               Voting Power (%)
@@ -364,14 +392,15 @@ export function AdminSettings() {
           <Button
             className="w-full bg-green-600 hover:bg-green-700 text-white"
             onClick={addOwner}
-            disabled={!newOwnerAddress || !newOwnerPercentage || isProcessing}
+            // UPDATED disabled check
+            disabled={!newOwnerAddress || !newOwnerName || !newOwnerPercentage || isProcessing}
           >
             {isProcessing ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
             ) : (
               <>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Add Owner
+                Submit Add Owner Proposal {/* UPDATED */}
               </>
             )}
           </Button>
@@ -383,7 +412,7 @@ export function AdminSettings() {
         <CardHeader>
           <CardTitle className="text-white flex items-center space-x-2">
             <UserMinus className="h-5 w-5 text-red-500" />
-            <span>Remove Owner</span>
+            <span>Submit Remove Owner Proposal</span> {/* UPDATED */}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -409,7 +438,7 @@ export function AdminSettings() {
             ) : (
               <>
                 <UserMinus className="h-4 w-4 mr-2" />
-                Remove Owner
+                Submit Remove Owner Proposal {/* UPDATED */}
               </>
             )}
           </Button>
@@ -421,7 +450,7 @@ export function AdminSettings() {
         <CardHeader>
           <CardTitle className="text-white flex items-center space-x-2">
             <Percent className="h-5 w-5 text-yellow-500" />
-            <span>Change Required Percentage</span>
+            <span>Submit Change Percentage Proposal</span> {/* UPDATED */}
           </CardTitle>
           <CardDescription className="text-gray-400">
             Current requirement: {currentRequiredPercentage}%
@@ -451,7 +480,7 @@ export function AdminSettings() {
             ) : (
               <>
                 <Percent className="h-4 w-4 mr-2" />
-                Change Percentage
+                Submit Percentage Change {/* UPDATED */}
               </>
             )}
           </Button>
