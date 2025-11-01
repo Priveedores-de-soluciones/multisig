@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { ethers } from "ethers"
 import {
@@ -22,23 +21,74 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Send, AlertTriangle, FileText } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
-import { truncateAddress } from "@/lib/utils"
-import { Token } from "@/lib/constants" // Import Token interface
+import { useWeb3 } from "../hooks/use-web3"
+import { Token } from "@/lib/constants"
+
+// Define the type for the token dropdown component
+function CurrencySelect({ 
+    tokens, 
+    value, 
+    onChange 
+}: { 
+    tokens: readonly Token[], 
+    value: string, 
+    onChange: (address: string) => void 
+}) {
+    // Determine the current network's native token symbol for display
+    const nativeToken = tokens.find(t => t.address === ethers.ZeroAddress);
+
+    return (
+        <select
+            id="tokenAddress"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full h-10 px-3 py-2 bg-gray-800 border border-gray-700 text-white rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+        >
+            <option value="" disabled className="text-gray-500">
+                Select currency...
+            </option>
+            
+            {/* Native Token (always first, uses ZeroAddress) */}
+            {nativeToken && (
+                <option value={nativeToken.address}>
+                    {nativeToken.symbol} (Native)
+                </option>
+            )}
+
+            {/* Other Tokens */}
+            {tokens
+                .filter(t => t.address !== ethers.ZeroAddress)
+                .map((token) => (
+                    <option key={token.address} value={token.address}>
+                        {token.symbol} ({token.name})
+                    </option>
+                ))}
+        </select>
+    )
+}
 
 export function TransactionForm() {
   const { isConnected } = useWeb3()
+  
+  // 1. Simplified formData - removed isTokenTransfer checkbox
   const [formData, setFormData] = useState({
     to: "",
     value: "",
-    isTokenTransfer: false,
-    tokenAddress: "",
+    tokenAddress: "", // Selected token contract address (or ZeroAddress for native)
     data: "",
   })
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [popularTokens, setPopularTokens] = useState<readonly Token[]>([]) // New state for dynamic tokens
+  const [popularTokens, setPopularTokens] = useState<readonly Token[]>([])
   const { toast } = useToast()
   
+  // Memoized current selection details
+  const selectedToken = useMemo(() => {
+    return popularTokens.find(
+        t => t.address.toLowerCase() === formData.tokenAddress.toLowerCase()
+    )
+  }, [formData.tokenAddress, popularTokens])
+
   // Fetch tokens on connection/chain change
   useEffect(() => {
     const fetchTokens = async () => {
@@ -46,18 +96,31 @@ export function TransactionForm() {
         try {
           const tokens = await web3Service.getPopularTokens()
           setPopularTokens(tokens)
+          
+          // Set default to Native Token (ethers.ZeroAddress)
+          const nativeToken = tokens.find(t => t.address === ethers.ZeroAddress)
+          if (nativeToken && !formData.tokenAddress) {
+              setFormData(prev => ({ ...prev, tokenAddress: nativeToken.address }))
+          }
+          
         } catch (e) {
           console.error("Failed to fetch popular tokens:", e)
         }
       } else {
         setPopularTokens([])
+        setFormData(prev => ({ ...prev, tokenAddress: "" }))
       }
     }
     fetchTokens()
   }, [isConnected])
 
-  const handleInputChange = (field: string, value: string | boolean) => {
+  const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+  
+  // Handle currency selection from the dropdown
+  const handleCurrencySelect = (address: string) => {
+      setFormData((prev) => ({ ...prev, tokenAddress: address }))
   }
 
   const submitTransaction = async () => {
@@ -72,25 +135,18 @@ export function TransactionForm() {
 
     setIsSubmitting(true)
     try {
-      let tokenDecimals = 18
-      if (formData.isTokenTransfer && formData.tokenAddress) {
-        // Find token details from the dynamically loaded list
-        const token = popularTokens.find(
-          t => t.address.toLowerCase() === formData.tokenAddress.toLowerCase()
-        )
-        if (token) {
-          tokenDecimals = token.decimals
-        } else {
-           // If custom token, assume 18 decimals, but warn or fetch decimals in a real app
-           console.warn("Using default 18 decimals for custom token.")
-        }
+      if (!selectedToken) {
+          throw new Error("Please select a valid currency for transfer.")
       }
+      
+      const isTokenTransfer = selectedToken.address !== ethers.ZeroAddress
+      const tokenDecimals = selectedToken.decimals
 
       const result = await web3Service.submitTransaction(
         formData.to,
         formData.value,
-        formData.isTokenTransfer,
-        formData.isTokenTransfer ? formData.tokenAddress : undefined,
+        isTokenTransfer, // Determined by selected token address
+        selectedToken.address, // Always use the selected token address
         formData.data || "0x",
         tokenDecimals
       )
@@ -109,11 +165,12 @@ export function TransactionForm() {
         className: "bg-green-600 text-white border-green-700",
       })
 
+      // Reset form data after successful submission
+      const nativeTokenAddress = popularTokens.find(t => t.address === ethers.ZeroAddress)?.address || ""
       setFormData({
         to: "",
         value: "",
-        isTokenTransfer: false,
-        tokenAddress: "",
+        tokenAddress: nativeTokenAddress,
         data: "",
       })
     } catch (error: any) {
@@ -128,7 +185,8 @@ export function TransactionForm() {
     }
   }
 
-  const isFormValid = formData.to && formData.value && (!formData.isTokenTransfer || formData.tokenAddress)
+  // Form validity check: Recipient, value, and a token must be selected
+  const isFormValid = formData.to && formData.value && formData.tokenAddress
 
   return (
     <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
@@ -161,62 +219,36 @@ export function TransactionForm() {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="value" className="text-gray-300 text-sm">
-            Amount
-          </Label>
-          <Input
-            id="value"
-            type="number"
-            step="0.000001"
-            placeholder="0.0"
-            value={formData.value}
-            onChange={(e) => handleInputChange("value", e.target.value)}
-            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="isTokenTransfer"
-            checked={formData.isTokenTransfer}
-            onCheckedChange={(checked) => handleInputChange("isTokenTransfer", checked as boolean)}
-            className="border-gray-600"
-          />
-          <Label htmlFor="isTokenTransfer" className="text-gray-300 text-sm">
-            Token Transfer
-          </Label>
-        </div>
-
-        {formData.isTokenTransfer && (
-          <div className="space-y-2">
-            <Label htmlFor="tokenAddress" className="text-gray-300 text-sm">
-              Token Contract Address
-            </Label>
-            <Input
-              id="tokenAddress"
-              placeholder="0xA0b86a33E6441E6C7D3E4C5B4B6C7D8E9F0A1B2C"
-              value={formData.tokenAddress}
-              onChange={(e) => handleInputChange("tokenAddress", e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
-            />
-            <div className="flex flex-wrap gap-2 mt-2">
-              {/* Use dynamically loaded popularTokens */}
-              {popularTokens.filter(t => t.address !== ethers.ZeroAddress).map((token) => (
-                <Button
-                  key={token.symbol}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleInputChange("tokenAddress", token.address)}
-                  className="border-gray-700 hover:bg-gray-800 text-gray-300 text-xs"
-                >
-                  {token.symbol}
-                </Button>
-              ))}
+        {/* Amount and Currency Selection Group */}
+        <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="value" className="text-gray-300 text-sm">
+                Amount
+              </Label>
+              <Input
+                id="value"
+                type="number"
+                step="0.000001"
+                placeholder="0.0"
+                value={formData.value}
+                onChange={(e) => handleInputChange("value", e.target.value)}
+                className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
+              />
             </div>
-          </div>
-        )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="currency" className="text-gray-300 text-sm">
+                Currency
+              </Label>
+              <CurrencySelect 
+                tokens={popularTokens}
+                value={formData.tokenAddress}
+                onChange={handleCurrencySelect}
+              />
+            </div>
+        </div>
 
+        {/* Transaction Data Input */}
         <div className="space-y-2">
           <Label htmlFor="data" className="text-gray-300 text-sm">
             Transaction Data (Optional)
@@ -263,13 +295,11 @@ export function TransactionForm() {
                     <strong>To:</strong> {formData.to}
                   </div>
                   <div>
-                    <strong>Amount:</strong> {formData.value} {formData.isTokenTransfer ? "tokens" : "ETH"}
+                    <strong>Amount:</strong> {formData.value} {selectedToken?.symbol || "Unknown Currency"}
                   </div>
-                  {formData.isTokenTransfer && (
-                    <div className="break-all">
-                      <strong>Token:</strong> {formData.tokenAddress}
-                    </div>
-                  )}
+                  <div className="break-all">
+                    <strong>Contract Address:</strong> {selectedToken?.address || "N/A"}
+                  </div>
                 </div>
                 <p className="mt-3 sm:mt-4 text-yellow-400 text-xs sm:text-sm">
                   This transaction will require approval from multisig owners before execution.

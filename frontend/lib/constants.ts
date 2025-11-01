@@ -55,8 +55,14 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
       decimals: 18,
     },
     {
-      name: "USD Coin (Testnet)",
-      address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Example Base Sepolia USDC
+      name: "USD Coin",
+      address: "0xd7e9C75C6C05FdE929cAc19bb887892de78819B7", // Example Base Sepolia USDC
+      symbol: "USDC",
+      decimals: 6,
+    },
+    {
+      name: "USD Tether",
+      address: "0xd7e9C75C6C05FdE929cAc19bb887892de78819B7", // Example Base Sepolia USDC
       symbol: "USDC",
       decimals: 6,
     },
@@ -70,7 +76,18 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
       symbol: "ETH",
       decimals: 18,
     },
-    // Add token addresses specific to Arbitrum Sepolia here if available
+    {
+      name: "USD Coin ",
+      address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", // Example Arbitrum Sepolia USDC
+      symbol: "USDC",
+      decimals: 6,
+    }, 
+    {
+      name: "USD Tether ",
+      address: "0xf3118a17863996B9F2A073c9A66Faaa664355cf8", // Example Arbitrum Sepolia USDC
+      symbol: "USDT",
+      decimals: 6,
+    }, 
   ],
 
   // Celo Sepolia (Chain ID 11142220) - **Celo is the native token**
@@ -83,9 +100,15 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
     },
     // Placeholder for a stablecoin on Celo Sepolia
     {
-      name: "Celo Dollar (Testnet)",
-      address: "0x69Ff14a42E863e4881827D3971e44280E816053f", // Placeholder address
+      name: "Celo Dollar ",
+      address: "0xdE9e4C3ce781b4bA68120d6261cbad65ce0aB00b", // Placeholder address
       symbol: "cUSD",
+      decimals: 18,
+    },
+     {
+      name: "Tether USD ",
+      address: "0xf74B14ecbAdC9fBb283Fb3c8ae11E186856eae6f", // Placeholder address
+      symbol: "USDT",
       decimals: 18,
     },
   ],
@@ -98,7 +121,18 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
       symbol: "ETH",
       decimals: 18,
     },
-    // Add Lisk Sepolia specific tokens here
+    {
+      name: "Lisk",
+      address: "0x8a21CF9Ba08Ae709D64Cb25AfAA951183EC9FF6D", // Placeholder address
+      symbol: "LSK",
+      decimals: 18,
+    },
+     {
+      name: "Tether USD ",
+      address: "0x2728DD8B45B788e26d12B13Db5A244e5403e7eda", // Placeholder address
+      symbol: "USDT",
+      decimals: 18,
+    },
   ],
 } as const;
 

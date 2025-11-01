@@ -1,24 +1,27 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react" // <--- Added useMemo
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RefreshCw, Wallet, User, Shield, TrendingUp, Users } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
+import { useWeb3 } from "../hooks/use-web3"
 import { ethers } from "ethers"
 import { truncateAddress, formatBalance } from "@/lib/utils"
-import { Token, CHAIN_POPULAR_TOKENS } from "@/lib/constants" // Import Token interface
+import { Token, CHAIN_POPULAR_TOKENS } from "@/lib/constants"
 import { useToast } from "@/hooks/use-toast"
 
 export function Dashboard() {
   const { isConnected, walletAddress } = useWeb3()
   const { toast } = useToast()
   
-  const [nativeToken, setNativeToken] = useState<Token | undefined>(undefined) // State for native token details
-  const [balances, setBalances] = useState<{ [symbol: string]: string }>({}) // Use an object for balances
+  const [nativeToken, setNativeToken] = useState<Token | undefined>(undefined)
+  const [balances, setBalances] = useState<{ [symbol: string]: string }>({})
   
+  // 💰 State for storing USD prices (Symbol -> Price in USD)
+  const [pricesUsd, setPricesUsd] = useState<{ [symbol: string]: number }>({}); 
+
   const [contractInfo, setContractInfo] = useState({
     owner: "",
     controller: "",
@@ -27,6 +30,27 @@ export function Dashboard() {
   })
   const [pendingTransactions, setPendingTransactions] = useState<any[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
+  
+  // 💰 NEW: Total Portfolio USD Value Calculation
+  const totalUsdValue = useMemo(() => {
+    let total = 0
+    for (const symbol in balances) {
+      const balance = parseFloat(balances[symbol] || "0")
+      const price = pricesUsd[symbol] || 0
+      total += balance * price
+    }
+    return total
+  }, [balances, pricesUsd])
+  
+  // 💰 NEW: USD Formatting Helper
+  const formatUsd = (value: number) => {
+    return new Intl.NumberFormat('en-US', { 
+      style: 'currency', 
+      currency: 'USD',
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    }).format(value);
+  }
 
   const refreshBalances = async () => {
     if (!isConnected || !web3Service.isConnected()) { 
@@ -36,15 +60,19 @@ export function Dashboard() {
 
     setIsRefreshing(true)
     try {
-      const native = await web3Service.getNativeToken()
-      if (!native) throw new Error("Could not load native token info for current chain.");
-      setNativeToken(native)
+      const networkInfo = await web3Service.getNetworkInfo()
+      if (!networkInfo) throw new Error("Could not determine current network.");
       
       const allPopularTokens = await web3Service.getPopularTokens()
-
-      const newBalances: { [symbol: string]: string } = {}
+      const native = allPopularTokens.find(t => t.address === ethers.ZeroAddress)
+      if (!native) throw new Error("Could not load native token info for current chain.");
       
-      // 1. Get Native Token Balance (using native token symbol)
+      setNativeToken(native)
+      
+      const newBalances: { [symbol: string]: string } = {}
+      const tokensToFetchPrice: Token[] = [native]; // Start with the native token
+
+      // 1. Get Native Token Balance
       const nativeBalance = await web3Service.getBalance()
       newBalances[native.symbol] = nativeBalance
       
@@ -54,6 +82,7 @@ export function Dashboard() {
           try {
             const tokenBalance = await web3Service.getTokenBalance(token.address, token.decimals)
             newBalances[token.symbol] = tokenBalance
+            tokensToFetchPrice.push(token); // Add token to price list
           } catch (e) {
             newBalances[token.symbol] = "0.0"
           }
@@ -61,7 +90,12 @@ export function Dashboard() {
       }
       setBalances(newBalances)
       
-      // 3. Get Contract Info
+      // 3. NEW: Fetch USD Prices
+      const tokenSymbolsToFetch = tokensToFetchPrice.map(t => t.symbol);
+      const usdPrices = await web3Service.getPricesUsdBySymbol(tokenSymbolsToFetch); 
+      setPricesUsd(usdPrices);
+
+      // 4. Get Contract Info
       const [owner, controller, ownersData, requiredPercentage] = await Promise.all([
         web3Service.getOwner(),
         web3Service.getController(),
@@ -82,7 +116,7 @@ export function Dashboard() {
         requiredPercentage,
       })
 
-      // 4. Get Pending Transactions
+      // 5. Get Pending Transactions (Logic remains unchanged, but uses updated allPopularTokens)
       const txCount = await web3Service.getTransactionCount()
       const pending = []
       
@@ -138,34 +172,64 @@ export function Dashboard() {
     }
   }, [isConnected])
 
-  // Helper for rendering balance cards (now dynamic)
-  const renderBalanceCard = (token: Token, balance: string) => (
-    <Card className="bg-gray-900 border-gray-800" key={token.symbol}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-300">{token.symbol} Balance</CardTitle>
-        <Wallet className="h-4 w-4 text-blue-500" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-xl sm:text-2xl font-bold text-white break-all">
-          {formatBalance(balance)} {token.symbol}
-        </div>
-        <p className="text-xs text-gray-500 mt-1">{token.name} ({nativeToken?.name} Network)</p>
-      </CardContent>
-    </Card>
-  )
+  // Helper for rendering balance cards (UPDATED for USD)
+  const renderBalanceCard = (token: Token, balance: string) => {
+    // 1. Get the USD price from state
+    const priceUsd = pricesUsd[token.symbol] || 0;
+    
+    // 2. Calculate the total USD value for this token
+    let usdValue = 0;
+    try {
+      usdValue = parseFloat(balance) * priceUsd;
+    } catch (e) {
+      usdValue = 0;
+    }
+    
+    // 3. Format the USD value
+    const formattedUsdValue = formatUsd(usdValue);
+      
+    return (
+      <Card className="bg-gray-900 border-gray-800" key={token.symbol}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-gray-300">{token.symbol} Balance</CardTitle>
+          <Wallet className="h-4 w-4 text-blue-500" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl sm:text-2xl font-bold text-white break-all">
+            {formatBalance(balance)} {token.symbol}
+          </div>
+          {/* Display USD Value */}
+          <p className="text-sm font-semibold text-green-400 mt-1">
+            {formattedUsdValue} USD
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{token.name} ({nativeToken?.name} Network)</p>
+        </CardContent>
+      </Card>
+    )
+  }
   
   // Get the popular tokens to display on the dashboard (e.g., native + one stablecoin/popular token)
-  const tokensToDisplay = []
-  if (nativeToken) {
-    tokensToDisplay.push(nativeToken)
-    // Find a second token (e.g., USDC, cUSD) to display next to the native one
-    const secondToken = (Object.values(CHAIN_POPULAR_TOKENS[web3Service.getNetworkInfo()?.chainId || 0] || {}) as readonly Token[])
-      .find(t => t.address !== ethers.ZeroAddress)
-    
-    if (secondToken) {
-        tokensToDisplay.push(secondToken)
-    }
-  }
+  const tokensToDisplay: Token[] = useMemo(() => {
+      const tokens: Token[] = []
+      if (nativeToken) {
+          tokens.push(nativeToken)
+          
+          // Try to get tokens for the current chain
+          const currentChainId = web3Service.getNetworkInfo()?.chainId || 0
+          const popularTokens = CHAIN_POPULAR_TOKENS[currentChainId] || []
+          
+          // Find a stablecoin or popular token
+          const secondToken = popularTokens.find(t => 
+              t.address !== ethers.ZeroAddress && 
+              t.symbol.toUpperCase() !== nativeToken.symbol.toUpperCase()
+          )
+          
+          if (secondToken) {
+              tokens.push(secondToken)
+          }
+      }
+      return tokens
+  }, [nativeToken]) // Depend on nativeToken
   
   if (!isConnected) {
     return (
@@ -181,6 +245,19 @@ export function Dashboard() {
   
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
+      
+      {/* 💰 NEW: Total Portfolio Value Card */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-gray-300 text-base">Total Portfolio Value</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-3xl sm:text-4xl font-extrabold text-green-400">
+            {formatUsd(totalUsdValue)}
+          </div>
+        </CardContent>
+      </Card>
+      
       {/* Balance Cards (Dynamic) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         {tokensToDisplay.slice(0, 2).map(token => {

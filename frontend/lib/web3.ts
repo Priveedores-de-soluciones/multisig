@@ -266,6 +266,46 @@ export class Web3Service {
     const tokens = await this.getPopularTokens();
     return tokens.find(t => t.address === ethers.ZeroAddress);
   }
+  
+  // --- NEW: Mock function to get USD prices for tokens ---
+  /**
+   * Fetches the current USD price for a list of token symbols.
+   * NOTE: In a real application, this would call a reliable price oracle API (e.g., CoinGecko).
+   * @param symbols An array of token symbols (e.g., ['ETH', 'USDC'])
+   * @returns A promise that resolves to an object mapping symbol to its USD price.
+   */
+  public async getPricesUsdBySymbol(symbols: string[]): Promise<{ [symbol: string]: number }> {
+    // This is a mock implementation. Replace with actual API call (e.g., fetch from CoinGecko)
+    const mockPrices: { [symbol: string]: number } = {
+      // Common native tokens and stablecoins
+      'ETH': 3500.00,  // Mock price for Ether-based chains (Base, Arbitrum, Lisk)
+      'CELO': 0.75,     // Mock price for Celo
+      'USDC': 1.00,    // Mock price for USDC
+      'USDT': 1.00,    // Mock price for USDT
+      'cUSD': 1.00,    // Mock price for cUSD
+      'wETH': 3500.00, // Mock price for Wrapped Ether
+      'WBTC': 70000.00, // Mock price for Wrapped Bitcoin
+    };
+
+    const prices: { [symbol: string]: number } = {};
+    for (const symbol of symbols) {
+      const price = mockPrices[symbol.toUpperCase()];
+      // Use 1.0 for stablecoins if not explicitly mocked, otherwise use the mock price, or 0.0 if unknown.
+      if (price !== undefined) {
+          prices[symbol] = price;
+      } else if (symbol.toUpperCase().includes('USD')) { // Simple check for USD stablecoins
+          prices[symbol] = 1.00;
+      } else {
+          // In a real app, you would log an error or fetch from a secondary source
+          prices[symbol] = 0.0;
+      }
+    }
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    return prices;
+  }
   // ---------------------------------------------------
 
 
