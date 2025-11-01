@@ -2,6 +2,7 @@
 import { ethers } from "ethers"
 import { CONTRACT_ADDRESSES } from "./constants"
 import { COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
+import { getTargetChainId } from "./networks" // Import target chain ID
 
 // 1. Updated interface to include initiator
 export interface TransactionDetails {
@@ -32,34 +33,113 @@ export interface Owner {
 
 export class Web3Service {
   private signer: ethers.Signer | null = null
+  private provider: ethers.BrowserProvider | null = null // Store provider
 
   /**
-   * NEW: This method allows our AppKitProvider to inject the signer
-   * when the user connects their wallet.
+   * NEW: Connects to the user's wallet (e.g., MetaMask)
    */
-  public async setSigner(signer: ethers.Signer | null) {
-    this.signer = signer
-    if (signer) {
-      console.log("Web3Service signer updated:", await signer.getAddress())
-    } else {
-      console.log("Web3Service signer cleared.")
+  public async connect(): Promise<string> {
+    if (typeof window.ethereum === "undefined") {
+      throw new Error("No crypto wallet found. Please install it.")
+    }
+
+    try {
+      // 1. Create provider, requesting "any" network
+      const browserProvider = new ethers.BrowserProvider(window.ethereum, "any")
+      
+      // 2. Request accounts from user
+      const accounts = await browserProvider.send("eth_requestAccounts", [])
+      if (accounts.length === 0) {
+        throw new Error("No accounts found.")
+      }
+
+      // 3. Get the signer
+      const signer = await browserProvider.getSigner()
+      
+      // 4. Store provider and signer
+      this.provider = browserProvider
+      this.signer = signer
+
+      // 5. Return address
+      return await signer.getAddress()
+    } catch (error: any) {
+      console.error("Error connecting wallet:", error)
+      throw new Error(error.message || "Failed to connect wallet")
     }
   }
-  public hasSigner(): boolean {
-  return this.signer !== null
-}
+
+  /**
+   * NEW: Disconnects the wallet by clearing the signer
+   */
+  public async disconnect() {
+    this.signer = null
+    this.provider = null
+    console.log("Web3Service signer and provider cleared.")
+  }
+
+  /**
+   * NEW: Checks if a signer is available
+   */
+  public isConnected(): boolean {
+    return this.signer !== null
+  }
+
+  /**
+   * NEW: Gets the current user's address
+   */
+  public async getCurrentAddress(): Promise<string> {
+    if (!this.signer) {
+      throw new Error("Wallet not connected")
+    }
+    return await this.signer.getAddress()
+  }
+
+  /**
+   * NEW: Requests to switch to the target network
+   */
+  public async switchNetwork(): Promise<void> {
+    if (!this.provider) {
+      throw new Error("Wallet not connected. Cannot switch network.")
+    }
+
+    const targetChainId = getTargetChainId() // Get target chain from our networks file
+    const chainIdHex = `0x${targetChainId.toString(16)}`
+
+    try {
+      // Request a switch to the target chain
+      await this.provider.send("wallet_switchEthereumChain", [{ chainId: chainIdHex }])
+    } catch (switchError: any) {
+      // This error code (4902) indicates that the chain has not been added to MetaMask.
+      if (switchError.code === 4902) {
+        // You can add logic here to add the chain to MetaMask
+        // e.g., await this.provider.send("wallet_addEthereumChain", [CHAIN_DETAILS_OBJECT])
+        console.error("This network is not added to your wallet.")
+        throw new Error("This network is not added to your wallet.")
+      }
+      console.error("Failed to switch network:", switchError)
+      throw new Error("Failed to switch network.")
+    }
+  }
   
-  // Helper to get the provider from the signer
+  // DELETED: setSigner(signer: ethers.Signer | null)
+  // DELETED: hasSigner() (replaced by isConnected())
+
+  // Helper to get the provider
   private getProvider(): ethers.Provider {
-    if (!this.signer?.provider) {
+    // Use the stored provider
+    if (!this.provider) {
+      // Fallback for safety, though connect() should always set it
+      if (this.signer?.provider) {
+        return this.signer.provider
+      }
       throw new Error("Wallet not connected or provider not available")
     }
-    return this.signer.provider
+    return this.provider
   }
 
-  // DELETED: connect(), switchToBaseSepolia(), disconnect(), isConnected(), getCurrentAddress()
-  // AppKit now handles all of these.
-
+  // --- All other methods (getAllTransactions, contract calls, etc.) remain unchanged ---
+  // They will work correctly as they all depend on this.signer and this.getProvider()
+  
   async getAllTransactions(): Promise<FullTransaction[]> {
     if (!this.signer) throw new Error("Wallet not connected")
 

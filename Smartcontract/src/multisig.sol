@@ -42,7 +42,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     Transaction[] public transactions;
     bool public paused = false;
     uint256 public timelockPeriod = 60 seconds;
-    uint256 public expiryPeriod = 7 days;
+    uint256 public expiryPeriod = 3 days;
     uint256 public minOwners = 2;
 
     // ============ EVENTS ============

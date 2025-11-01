@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Coins, RefreshCw, Plus, Copy, ExternalLink } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3"
+import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { POPULAR_TOKENS, CONTRACT_ADDRESSES } from "@/lib/constants"
 import { truncateAddress } from "@/lib/utils"
 

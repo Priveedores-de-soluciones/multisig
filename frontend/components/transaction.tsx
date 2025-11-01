@@ -30,7 +30,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { web3Service, FullTransaction } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3"
+import { useWeb3 } from "@/hooks/use-web3" // UPDATED PATH
 import { ethers } from "ethers"
 import { truncateAddress } from "@/lib/utils"
 import { POPULAR_TOKENS } from "@/lib/constants"
@@ -527,3 +527,4 @@ export function TransactionManager() {
     </>
   )
 }
+

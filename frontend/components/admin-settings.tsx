@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Shield, Users, AlertTriangle, UserPlus, UserMinus, Percent } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3"
+import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { truncateAddress } from "@/lib/utils"
 
 export function AdminSettings() {
