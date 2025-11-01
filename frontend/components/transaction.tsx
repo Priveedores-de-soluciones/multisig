@@ -36,10 +36,18 @@ import { truncateAddress } from "@/lib/utils"
 import { POPULAR_TOKENS } from "@/lib/constants"
 import { useToast } from "@/components/ui/use-toast"
 
+// NEW interface
+interface OwnerDetails {
+  address: string
+  name: string
+  percentage: bigint
+}
+
+// UPDATED interface
 interface TransactionModalDetails {
-  confirmedBy: { address: string, percentage: bigint }[]
-  pendingBy: { address: string, percentage: bigint }[]
-  initiator: string
+  confirmedBy: OwnerDetails[]
+  pendingBy: OwnerDetails[]
+  initiatorName: string // Changed from initiator
 }
 
 export function TransactionManager() {
@@ -142,27 +150,51 @@ export function TransactionManager() {
     setModalDetails(null)
 
     try {
-      const { addresses, percentages } = await web3Service.getOwners()
+      // 1. Fetch all owner data, including names
+      // (Assuming web3Service.getOwners() now returns { addresses, names, percentages })
+      const { addresses, names, percentages } = await web3Service.getOwners()
       
-      const confirmedBy: { address: string, percentage: bigint }[] = []
-      const pendingBy: { address: string, percentage: bigint }[] = []
+      // 2. Create a lookup map for all owners
+      const ownerMap = new Map<string, { name: string, percentage: bigint }>()
+      for (let i = 0; i < addresses.length; i++) {
+        ownerMap.set(addresses[i].toLowerCase(), { name: names[i], percentage: percentages[i] })
+      }
+
+      // 3. Find initiator's name
+      const initiatorAddress = tx.initiator.toLowerCase()
+      const initiatorInfo = ownerMap.get(initiatorAddress)
+      // Fallback to truncated address if (somehow) not found
+      const initiatorName = initiatorInfo ? initiatorInfo.name : truncateAddress(tx.initiator)
+
+      // 4. Build confirmed/pending lists
+      const confirmedBy: OwnerDetails[] = []
+      const pendingBy: OwnerDetails[] = []
 
       for (let i = 0; i < addresses.length; i++) {
         const ownerAddress = addresses[i]
-        const ownerPercentage = percentages[i]
+        // We can be sure the owner exists in the map
+        const ownerInfo = ownerMap.get(ownerAddress.toLowerCase())! 
+        
         const hasConfirmed = await web3Service.hasConfirmed(tx.id, ownerAddress)
         
+        const ownerDetail: OwnerDetails = {
+          address: ownerAddress,
+          name: ownerInfo.name,
+          percentage: ownerInfo.percentage
+        }
+
         if (hasConfirmed) {
-          confirmedBy.push({ address: ownerAddress, percentage: ownerPercentage })
+          confirmedBy.push(ownerDetail)
         } else {
-          pendingBy.push({ address: ownerAddress, percentage: ownerPercentage })
+          pendingBy.push(ownerDetail)
         }
       }
 
+      // 5. Set the new modal details
       setModalDetails({
         confirmedBy,
         pendingBy,
-        initiator: tx.initiator, 
+        initiatorName: initiatorName, 
       })
     } catch (error: any) {
       console.error("Error fetching modal details:", error)
@@ -433,10 +465,19 @@ export function TransactionManager() {
                   <span className="text-gray-400">Value:</span>
                   <p className="font-mono break-all">{selectedTx ? getTransactionValue(selectedTx) : 'N/A'}</p>
                 </div>
+                
+                {/* --- UPDATED INITIATOR --- */}
                 <div>
                   <span className="text-gray-400">Initiator:</span>
                   <p className="font-mono break-all">
-                    {modalDetails?.initiator ? truncateAddress(modalDetails.initiator) : 'N/A'}
+                    {modalDetails?.initiatorName ? (
+                      <>
+                        <span className="text-white font-medium">{modalDetails.initiatorName}</span>
+                        <span className="text-gray-500 ml-2">({truncateAddress(selectedTx!.initiator)})</span>
+                      </>
+                    ) : (
+                      'N/A'
+                    )}
                   </p>
                 </div>
               </div>
@@ -446,25 +487,30 @@ export function TransactionManager() {
                   <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-400" />
                   Confirmation Status
                 </h4>
+                
+                {/* --- UPDATED CONFIRMED BY --- */}
                 <div className="space-y-2">
                   <span className="text-gray-400 text-xs sm:text-sm">Confirmed By:</span>
                   {modalDetails?.confirmedBy.length === 0 && <p className="text-gray-500 text-xs sm:text-sm">No confirmations yet.</p>}
                   {modalDetails?.confirmedBy.map(owner => (
-                    <div key={owner.address} className="flex items-center space-x-2 text-xs sm:text-sm">
+                    <div key={owner.address} className="flex flex-wrap items-center gap-x-2 text-xs sm:text-sm">
                       <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 flex-shrink-0" />
-                      <span className="font-mono break-all">{truncateAddress(owner.address)}</span>
+                      <span className="text-white font-medium">{owner.name}</span>
+                      <span className="font-mono break-all text-gray-500">{truncateAddress(owner.address)}</span>
                       <span className="text-gray-400">({owner.percentage.toString()}%)</span>
                     </div>
                   ))}
                 </div>
                 
+                {/* --- UPDATED PENDING BY --- */}
                 <div className="space-y-2 mt-3">
                   <span className="text-gray-400 text-xs sm:text-sm">Pending Confirmation:</span>
                   {modalDetails?.pendingBy.length === 0 && <p className="text-gray-500 text-xs sm:text-sm">All owners have confirmed.</p>}
                   {modalDetails?.pendingBy.map(owner => (
-                    <div key={owner.address} className="flex items-center space-x-2 text-xs sm:text-sm">
+                    <div key={owner.address} className="flex flex-wrap items-center gap-x-2 text-xs sm:text-sm">
                       <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
-                      <span className="font-mono break-all">{truncateAddress(owner.address)}</span>
+                      <span className="text-white font-medium">{owner.name}</span>
+                      <span className="font-mono break-all text-gray-500">{truncateAddress(owner.address)}</span>
                       <span className="text-gray-400">({owner.percentage.toString()}%)</span>
                     </div>
                   ))}

@@ -10,7 +10,13 @@ libs = ['lib']
 [rpc_endpoints]
 celoSepolia = "${CELO_SEPOLIA_RPC_URL}"
 baseSepolia = "${BASE_SEPOLIA_RPC_URL}"
+# Add these lines
+arbitrumSepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+liskSepolia = "${LISK_SEPOLIA_RPC_URL}"
 
 [etherscan]
 celoSepolia = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }
 baseSepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+# Add these lines
+arbitrumSepolia = { key = "${ARBISCAN_API_KEY}", url = "https://api-sepolia.arbiscan.io/api" }
+liskSepolia = { key = "${LISKSCAN_API_KEY}", url = "https://sepolia-blockscout.lisk.com/api" }
