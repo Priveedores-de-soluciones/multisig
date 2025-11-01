@@ -16,7 +16,7 @@ export function AdminSettings() {
   const { isConnected, walletAddress } = useWeb3()
   const [owners, setOwners] = useState<any[]>([])
   const [newOwnerAddress, setNewOwnerAddress] = useState("")
-  const [newOwnerName, setNewOwnerName] = useState("") // <-- ADDED
+  const [newOwnerName, setNewOwnerName] = useState("")
   const [newOwnerPercentage, setNewOwnerPercentage] = useState("")
   const [removeOwnerAddress, setRemoveOwnerAddress] = useState("")
   const [newRequiredPercentage, setNewRequiredPercentage] = useState("")
@@ -35,10 +35,9 @@ export function AdminSettings() {
         web3Service.isPaused(),
       ])
 
-      // Updated to include 'names' from the new getOwners response
       const formattedOwners = ownersData.addresses.map((addr: string, index: number) => ({
         address: addr,
-        name: ownersData.names[index], // <-- ADDED
+        name: ownersData.names[index],
         percentage: Number(ownersData.percentages[index]),
         removable: ownersData.removables[index],
       }))
@@ -69,8 +68,6 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      // --- UPDATED ---
-      // Call the new submitAddOwner function
       const result = await web3Service.submitAddOwner(
         newOwnerAddress,
         newOwnerName,
@@ -90,18 +87,15 @@ export function AdminSettings() {
         description: `Proposal to add ${truncateAddress(newOwnerAddress)} has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
-      // --- END UPDATE ---
 
       setNewOwnerAddress("")
-      setNewOwnerName("") // <-- ADDED
+      setNewOwnerName("")
       setNewOwnerPercentage("")
-      
-      // Removed optimistic refresh. List will update when proposal is executed.
       
     } catch (error: any) {
       console.error("Add owner error:", error)
       toast({
-        title: "Failed to Submit Proposal", // <-- UPDATED
+        title: "Failed to Submit Proposal",
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -122,8 +116,6 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      // --- UPDATED ---
-      // Call the new submitRemoveOwner function
       const result = await web3Service.submitRemoveOwner(removeOwnerAddress)
 
       toast({
@@ -139,16 +131,13 @@ export function AdminSettings() {
         description: `Proposal to remove ${truncateAddress(removeOwnerAddress)} has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
-      // --- END UPDATE ---
 
       setRemoveOwnerAddress("")
-      
-      // Removed optimistic refresh.
 
     } catch (error: any) {
       console.error("Remove owner error:", error)
       toast({
-        title: "Failed to Submit Proposal", // <-- UPDATED
+        title: "Failed to Submit Proposal",
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -169,8 +158,6 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      // --- UPDATED ---
-      // Call the new submitChangeRequiredPercentage function
       const result = await web3Service.submitChangeRequiredPercentage(Number.parseInt(newRequiredPercentage))
 
       toast({
@@ -186,16 +173,13 @@ export function AdminSettings() {
         description: `Proposal to change percentage to ${newRequiredPercentage}% has been submitted for approval.`,
         className: "bg-green-600 text-white border-green-700",
       })
-      // --- END UPDATE ---
 
       setNewRequiredPercentage("")
-      
-      // Removed optimistic state update.
 
     } catch (error: any) {
       console.error("Change percentage error:", error)
       toast({
-        title: "Failed to Submit Proposal", // <-- UPDATED
+        title: "Failed to Submit Proposal",
         description: error.message || "Please try again",
         variant: "destructive",
       })
@@ -216,7 +200,6 @@ export function AdminSettings() {
 
     setIsProcessing(true)
     try {
-      // Pause/Unpause are direct calls, not proposals
       const tx = await (isPaused ? web3Service.unpause() : web3Service.pause())
 
       toast({
@@ -248,7 +231,7 @@ export function AdminSettings() {
 
   if (!isConnected) {
     return (
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
         <CardContent className="pt-6">
           <div className="text-center py-6">
             <p className="text-gray-400">Please connect your wallet to access admin settings</p>
@@ -259,32 +242,33 @@ export function AdminSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Warning Banner */}
-      <Card className="bg-red-900/20 border-red-800">
-        <CardContent className="pt-6">
-          <div className="flex items-center space-x-2 text-red-400">
-            <AlertTriangle className="h-5 w-5" />
-            <span className="font-medium">Multisig Admin Functions</span>
+      <Card className="bg-red-900/20 border-red-800 w-full">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex items-start space-x-2 text-red-400">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-medium block sm:inline">Multisig Admin Functions</span>
+              <p className="text-red-300 mt-2 text-xs sm:text-sm">
+                These functions submit **proposals** to modify the multisig contract.
+                Proposals must be approved and executed in the Transaction Manager.
+              </p>
+            </div>
           </div>
-          <p className="text-red-300 mt-2 text-sm">
-            {/* UPDATED description */}
-            These functions submit **proposals** to modify the multisig contract.
-            Proposals must be approved and executed in the Transaction Manager.
-          </p>
         </CardContent>
       </Card>
 
       {/* Contract Status */}
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-white">Contract Status</CardTitle>
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-white text-lg sm:text-xl">Contract Status</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-gray-300">Contract is currently:</span>
-              <Badge className={isPaused ? "bg-red-600 text-white" : "bg-green-600 text-white"}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <span className="text-gray-300 text-sm sm:text-base">Contract is currently:</span>
+              <Badge className={`${isPaused ? "bg-red-600 text-white" : "bg-green-600 text-white"} text-xs sm:text-sm`}>
                 {isPaused ? "Paused" : "Active"}
               </Badge>
             </div>
@@ -292,7 +276,7 @@ export function AdminSettings() {
               onClick={togglePause}
               disabled={isProcessing}
               variant={isPaused ? "default" : "destructive"}
-              className={isPaused ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+              className={`w-full sm:w-auto ${isPaused ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}`}
             >
               {isProcessing ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
@@ -305,32 +289,33 @@ export function AdminSettings() {
       </Card>
 
       {/* Current Owners */}
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <Users className="h-5 w-5 text-blue-500" />
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
             <span>Current Owners</span>
           </CardTitle>
-          <CardDescription className="text-gray-400">
+          <CardDescription className="text-gray-400 text-xs sm:text-sm">
             Current multisig owners and their voting power
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {owners.map((owner) => (
-              <div key={owner.address} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  {/* ADDED name display */}
-                  <span className="text-white font-medium">{owner.name}</span>
-                  <span className="text-gray-400 font-mono text-sm">{truncateAddress(owner.address)}</span>
+              <div key={owner.address} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-800 rounded-lg space-y-2 sm:space-y-0">
+                <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 min-w-0">
+                    <span className="text-white font-medium text-sm sm:text-base truncate">{owner.name}</span>
+                    <span className="text-gray-400 font-mono text-xs sm:text-sm">{truncateAddress(owner.address)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant="secondary" className="bg-blue-600 text-white">
+                <div className="flex items-center space-x-2 self-end sm:self-auto">
+                  <Badge variant="secondary" className="bg-blue-600 text-white text-xs">
                     {owner.percentage}%
                   </Badge>
                   {!owner.removable && (
-                    <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+                    <Badge variant="outline" className="border-yellow-600 text-yellow-400 text-xs">
                       Protected
                     </Badge>
                   )}
@@ -342,16 +327,16 @@ export function AdminSettings() {
       </Card>
 
       {/* Add Owner */}
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <UserPlus className="h-5 w-5 text-green-500" />
-            <span>Submit Add Owner Proposal</span> {/* UPDATED */}
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+            <UserPlus className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
+            <span>Submit Add Owner Proposal</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="newOwnerAddress" className="text-gray-300">
+            <Label htmlFor="newOwnerAddress" className="text-gray-300 text-sm">
               Owner Address
             </Label>
             <Input
@@ -359,12 +344,11 @@ export function AdminSettings() {
               placeholder="0x..."
               value={newOwnerAddress}
               onChange={(e) => setNewOwnerAddress(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
           </div>
-          {/* --- ADDED NAME FIELD --- */}
           <div className="space-y-2">
-            <Label htmlFor="newOwnerName" className="text-gray-300">
+            <Label htmlFor="newOwnerName" className="text-gray-300 text-sm">
               Owner Name
             </Label>
             <Input
@@ -372,12 +356,11 @@ export function AdminSettings() {
               placeholder="e.g. CEO, CTO, etc."
               value={newOwnerName}
               onChange={(e) => setNewOwnerName(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
           </div>
-          {/* --- END --- */}
           <div className="space-y-2">
-            <Label htmlFor="newOwnerPercentage" className="text-gray-300">
+            <Label htmlFor="newOwnerPercentage" className="text-gray-300 text-sm">
               Voting Power (%)
             </Label>
             <Input
@@ -386,13 +369,12 @@ export function AdminSettings() {
               placeholder="10"
               value={newOwnerPercentage}
               onChange={(e) => setNewOwnerPercentage(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
           </div>
           <Button
-            className="w-full bg-green-600 hover:bg-green-700 text-white"
+            className="w-full bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base"
             onClick={addOwner}
-            // UPDATED disabled check
             disabled={!newOwnerAddress || !newOwnerName || !newOwnerPercentage || isProcessing}
           >
             {isProcessing ? (
@@ -400,7 +382,7 @@ export function AdminSettings() {
             ) : (
               <>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Submit Add Owner Proposal {/* UPDATED */}
+                Submit Add Owner Proposal
               </>
             )}
           </Button>
@@ -408,16 +390,16 @@ export function AdminSettings() {
       </Card>
 
       {/* Remove Owner */}
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <UserMinus className="h-5 w-5 text-red-500" />
-            <span>Submit Remove Owner Proposal</span> {/* UPDATED */}
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+            <UserMinus className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+            <span>Submit Remove Owner Proposal</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="removeOwnerAddress" className="text-gray-300">
+            <Label htmlFor="removeOwnerAddress" className="text-gray-300 text-sm">
               Owner Address to Remove
             </Label>
             <Input
@@ -425,11 +407,11 @@ export function AdminSettings() {
               placeholder="0x..."
               value={removeOwnerAddress}
               onChange={(e) => setRemoveOwnerAddress(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
           </div>
           <Button
-            className="w-full bg-red-600 hover:bg-red-700 text-white"
+            className="w-full bg-red-600 hover:bg-red-700 text-white text-sm sm:text-base"
             onClick={removeOwner}
             disabled={!removeOwnerAddress || isProcessing}
           >
@@ -438,7 +420,7 @@ export function AdminSettings() {
             ) : (
               <>
                 <UserMinus className="h-4 w-4 mr-2" />
-                Submit Remove Owner Proposal {/* UPDATED */}
+                Submit Remove Owner Proposal
               </>
             )}
           </Button>
@@ -446,19 +428,19 @@ export function AdminSettings() {
       </Card>
 
       {/* Change Required Percentage */}
-      <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <Percent className="h-5 w-5 text-yellow-500" />
-            <span>Submit Change Percentage Proposal</span> {/* UPDATED */}
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+            <Percent className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
+            <span>Submit Change Percentage Proposal</span>
           </CardTitle>
-          <CardDescription className="text-gray-400">
+          <CardDescription className="text-gray-400 text-xs sm:text-sm">
             Current requirement: {currentRequiredPercentage}%
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="newRequiredPercentage" className="text-gray-300">
+            <Label htmlFor="newRequiredPercentage" className="text-gray-300 text-sm">
               New Required Percentage
             </Label>
             <Input
@@ -467,11 +449,11 @@ export function AdminSettings() {
               placeholder="51"
               value={newRequiredPercentage}
               onChange={(e) => setNewRequiredPercentage(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
           </div>
           <Button
-            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white"
+            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white text-sm sm:text-base"
             onClick={changeRequiredPercentage}
             disabled={!newRequiredPercentage || isProcessing}
           >
@@ -480,7 +462,7 @@ export function AdminSettings() {
             ) : (
               <>
                 <Percent className="h-4 w-4 mr-2" />
-                Submit Percentage Change {/* UPDATED */}
+                Submit Percentage Change
               </>
             )}
           </Button>

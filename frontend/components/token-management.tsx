@@ -35,7 +35,6 @@ export function TokenManagement() {
     try {
       const balances: TokenBalance[] = []
 
-      // Get ETH balance
       const ethBalance = await web3Service.getBalance()
       balances.push({
         address: "0x0000000000000000000000000000000000000000",
@@ -45,7 +44,6 @@ export function TokenManagement() {
         decimals: 18,
       })
 
-      // Get balances for popular tokens
       for (const token of POPULAR_TOKENS) {
         if (token.address !== "0x0000000000000000000000000000000000000000") {
           try {
@@ -94,10 +92,8 @@ export function TokenManagement() {
     }
 
     try {
-      // Try to get the balance of the custom token
       const balance = await web3Service.getTokenBalance(customTokenAddress, 18)
       
-      // Add to the list if not already present
       const exists = tokenBalances.find(
         t => t.address.toLowerCase() === customTokenAddress.toLowerCase()
       )
@@ -146,7 +142,6 @@ export function TokenManagement() {
 
   const openExplorer = (address: string) => {
     if (address === "0x0000000000000000000000000000000000000000") return
-    // Base Sepolia explorer
     window.open(`https://sepolia.basescan.org/address/${address}`, "_blank")
   }
 
@@ -167,7 +162,7 @@ export function TokenManagement() {
 
   if (!isConnected) {
     return (
-      <Card className="bg-gray-900 border-gray-800 max-w-4xl mx-auto">
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-4xl mx-auto">
         <CardContent className="pt-6">
           <div className="text-center py-6">
             <p className="text-gray-400">Please connect your wallet to manage tokens</p>
@@ -178,20 +173,20 @@ export function TokenManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Wallet Address Info */}
-      <Card className="bg-blue-900/20 border-blue-800">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-blue-300 mb-1">Company Wallet Address</p>
-              <p className="text-white font-mono">{CONTRACT_ADDRESSES.COMPANY_WALLET}</p>
+      <Card className="bg-blue-900/20 border-blue-800 w-full">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+            <div className="w-full sm:w-auto">
+              <p className="text-xs sm:text-sm text-blue-300 mb-1">Company Wallet Address</p>
+              <p className="text-white font-mono text-xs sm:text-base break-all">{CONTRACT_ADDRESSES.COMPANY_WALLET}</p>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={copyWalletAddress}
-              className="border-blue-600 hover:bg-blue-800 text-blue-300"
+              className="border-blue-600 hover:bg-blue-800 text-blue-300 w-full sm:w-auto"
             >
               <Copy className="h-4 w-4 mr-2" />
               Copy
@@ -204,15 +199,15 @@ export function TokenManagement() {
       </Card>
 
       {/* Token Balances */}
-      <Card className="bg-gray-900 border-gray-800 max-w-4xl mx-auto">
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-4xl mx-auto">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
             <div>
-              <CardTitle className="text-white flex items-center space-x-2">
-                <Coins className="h-5 w-5 text-green-500" />
+              <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+                <Coins className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
                 <span>Token Balances</span>
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className="text-gray-400 text-xs sm:text-sm">
                 View and manage wallet token balances
               </CardDescription>
             </div>
@@ -221,7 +216,7 @@ export function TokenManagement() {
               size="sm"
               onClick={fetchTokenBalances}
               disabled={isLoading}
-              className="border-gray-600 hover:bg-gray-800 bg-transparent"
+              className="border-gray-600 hover:bg-gray-800 bg-transparent w-full sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
@@ -231,24 +226,24 @@ export function TokenManagement() {
           <div className="space-y-3">
             {tokenBalances.length > 0 ? (
               tokenBalances.map((token) => (
-                <div key={token.address} className="p-4 bg-gray-800 rounded-lg border border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">
+                <div key={token.address} className="p-3 sm:p-4 bg-gray-800 rounded-lg border border-gray-700">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+                    <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-white font-bold text-xs sm:text-sm">
                           {token.symbol.substring(0, 2)}
                         </span>
                       </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white font-medium">{token.name}</span>
-                          <Badge variant="secondary" className="bg-gray-700 text-gray-300">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-white font-medium text-sm sm:text-base">{token.name}</span>
+                          <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
                             {token.symbol}
                           </Badge>
                         </div>
                         {token.address !== "0x0000000000000000000000000000000000000000" && (
-                          <div className="flex items-center space-x-2 mt-1">
-                            <span className="text-xs text-gray-400 font-mono">
+                          <div className="flex items-center space-x-1 sm:space-x-2 mt-1">
+                            <span className="text-xs text-gray-400 font-mono truncate max-w-[150px] sm:max-w-none">
                               {truncateAddress(token.address)}
                             </span>
                             <Button
@@ -271,8 +266,8 @@ export function TokenManagement() {
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-white">{token.balance}</p>
+                    <div className="text-right w-full sm:w-auto">
+                      <p className="text-lg sm:text-xl font-bold text-white break-all">{token.balance}</p>
                       <p className="text-xs text-gray-400">{token.symbol}</p>
                     </div>
                   </div>
@@ -280,8 +275,8 @@ export function TokenManagement() {
               ))
             ) : (
               <div className="text-center py-12">
-                <Coins className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">No tokens found</p>
+                <Coins className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 text-sm">No tokens found</p>
                 <Button
                   variant="outline"
                   className="mt-4 border-gray-600 hover:bg-gray-800 text-gray-300"
@@ -297,28 +292,28 @@ export function TokenManagement() {
       </Card>
 
       {/* Add Custom Token */}
-      <Card className="bg-gray-900 border-gray-800 max-w-4xl mx-auto">
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-white flex items-center space-x-2">
-            <Plus className="h-5 w-5 text-blue-500" />
+          <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
             <span>Track Custom Token</span>
           </CardTitle>
-          <CardDescription className="text-gray-400">
+          <CardDescription className="text-gray-400 text-xs sm:text-sm">
             Add a custom ERC-20 token to track its balance
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex space-x-2">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
             <Input
               placeholder="Enter token contract address (0x...)"
               value={customTokenAddress}
               onChange={(e) => setCustomTokenAddress(e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm flex-1"
             />
             <Button
               onClick={addCustomToken}
               disabled={!customTokenAddress}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Token

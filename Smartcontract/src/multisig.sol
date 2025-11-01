@@ -9,7 +9,7 @@ contract MultiSigWalletController is ReentrancyGuard {
 
     struct Owner {
         address ownerAddress;
-        string name; // Added
+        string name;
         uint256 percentage;
         bool exists;
         bool isRemovable;
@@ -41,7 +41,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     uint256 public poolPercentage;
     Transaction[] public transactions;
     bool public paused = false;
-    uint256 public timelockPeriod = 1 days;
+    uint256 public timelockPeriod = 60 seconds;
     uint256 public expiryPeriod = 7 days;
     uint256 public minOwners = 2;
 
@@ -49,7 +49,6 @@ contract MultiSigWalletController is ReentrancyGuard {
 
     event OwnerAdded(address indexed owner, string name, uint256 percentage);
     event OwnerRemoved(address indexed owner);
-    // ... (all other events are the same)
     event RequiredPercentageChanged(uint256 newPercentage);
     event TransactionSubmitted(
         uint256 indexed transactionId,
@@ -74,7 +73,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     event MinOwnersChanged(uint256 newMinOwners);
 
     // ============ MODIFIERS ============
-    // ... (all modifiers are the same)
+
     modifier onlyOwner() {
         require(owners[msg.sender].exists, "Not an owner");
         require(msg.sender != deployer, "Deployer cannot perform this action");
@@ -143,17 +142,21 @@ contract MultiSigWalletController is ReentrancyGuard {
         emit RequiredPercentageChanged(60);
     }
 
-    // ============ OWNER MANAGEMENT (INTERNAL) ============
-    // These functions can now only be called by the contract itself via a passed proposal
+    // ============ OWNER MANAGEMENT (EXTERNAL) ============
+    // These functions are called via proposals with encoded data
+    // They are external so they can be invoked via low-level call()
 
     /**
-     * @dev Internal logic to add an owner. Must be called via a proposal.
+     * @dev External function to add an owner. Called via proposal execution.
+     * Only callable by the contract via proposal mechanism.
      */
     function addOwnerInternal(
         address newOwner,
         string memory name,
         uint256 percentage
-    ) internal whenNotPaused {
+    ) external whenNotPaused {
+        // This can only be called by the contract itself via proposal execution
+        require(msg.sender == address(this), "Only callable via proposal");
         require(newOwner != address(0), "Invalid owner address");
         require(newOwner != deployer, "Cannot add deployer as owner");
         require(!owners[newOwner].exists, "Owner already exists");
@@ -179,9 +182,11 @@ contract MultiSigWalletController is ReentrancyGuard {
     }
 
     /**
-     * @dev Internal logic to remove an owner. Must be called via a proposal.
+     * @dev External function to remove an owner. Called via proposal execution.
      */
-    function removeOwnerInternal(address ownerToRemove) internal whenNotPaused {
+    function removeOwnerInternal(address ownerToRemove) external whenNotPaused {
+        // This can only be called by the contract itself via proposal execution
+        require(msg.sender == address(this), "Only callable via proposal");
         require(owners[ownerToRemove].exists, "Owner does not exist");
         require(owners[ownerToRemove].isRemovable, "Owner is not removable");
         require(
@@ -206,19 +211,19 @@ contract MultiSigWalletController is ReentrancyGuard {
     }
 
     /**
-     * @dev Internal logic to change required percentage. Must be called via a proposal.
+     * @dev External function to change required percentage. Called via proposal execution.
      */
     function changeRequiredPercentageInternal(uint256 newPercentage)
-        internal
+        external
         validPercentage(newPercentage)
         whenNotPaused
     {
+        // This can only be called by the contract itself via proposal execution
+        require(msg.sender == address(this), "Only callable via proposal");
         requiredPercentage = newPercentage;
         emit RequiredPercentageChanged(newPercentage);
     }
 
-    // ... (add internal versions for setMinOwners, setTimelockPeriod, setExpiryPeriod if you want them to be votable) ...
-    
     // ============ PROPOSAL SUBMISSION FUNCTIONS ============
     // Any owner can call these to START a vote
 
@@ -273,18 +278,16 @@ contract MultiSigWalletController is ReentrancyGuard {
     }
 
     // ============ TRANSACTION FUNCTIONS ============
-    // ... (submitTransaction, confirm, revoke, execute, etc. are all unchanged) ...
+
     function submitTransaction(
         address to,
         uint256 value,
         bool isTokenTransfer,
         address tokenAddress,
         bytes memory data
-    ) public onlyOwner whenNotPaused nonReentrant returns (uint256) { // Changed to public
+    ) public onlyOwner whenNotPaused nonReentrant returns (uint256) {
         require(to != address(0), "Invalid recipient address");
         require(to != address(companyWallet), "Cannot send to company wallet itself");
-        // Allow sending to self for proposals
-        // require(to != address(this), "Cannot send to controller contract"); 
         if (isTokenTransfer) {
             require(tokenAddress != address(0), "Invalid token address");
         }
@@ -467,7 +470,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     }
 
     // ============ VIEW FUNCTIONS ============
-    // ... (isConfirmed, getTransaction, hasConfirmed, etc. are unchanged)
+
     function isConfirmed(uint256 transactionId) public view returns (bool) {
         return transactions[transactionId].confirmationCount >= requiredPercentage;
     }
@@ -521,7 +524,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     function getOwnerCount() external view returns (uint256) {
         return ownerAddresses.length;
     }
-    
+
     function getOwners()
         external
         view
@@ -550,8 +553,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     function getPoolPercentage() external view returns (uint256) {
         return poolPercentage;
     }
-    
-    // Test function remains
+
     function test() external pure {}
 
     // ============ EMERGENCY FUNCTIONS (Deployer Only) ============

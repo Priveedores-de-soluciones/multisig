@@ -53,7 +53,6 @@ export function TransactionForm() {
 
     setIsSubmitting(true)
     try {
-      // Get token decimals if it's a token transfer
       let tokenDecimals = 18
       if (formData.isTokenTransfer && formData.tokenAddress) {
         const token = POPULAR_TOKENS.find(
@@ -79,7 +78,6 @@ export function TransactionForm() {
         className: "bg-blue-600 text-white border-blue-700",
       })
 
-      // Wait for transaction to be mined
       const receipt = await result.tx.wait()
 
       toast({
@@ -88,7 +86,6 @@ export function TransactionForm() {
         className: "bg-green-600 text-white border-green-700",
       })
 
-      // Reset form
       setFormData({
         to: "",
         value: "",
@@ -111,25 +108,25 @@ export function TransactionForm() {
   const isFormValid = formData.to && formData.value && (!formData.isTokenTransfer || formData.tokenAddress)
 
   return (
-    <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center space-x-2">
-          <FileText className="h-5 w-5 text-blue-500" />
+    <Card className="bg-gray-900 border-gray-800 w-full max-w-2xl mx-auto">
+      <CardHeader className="pb-3 sm:pb-6">
+        <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
+          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
           <span>Submit Transaction</span>
         </CardTitle>
-        <CardDescription className="text-gray-400">
+        <CardDescription className="text-gray-400 text-xs sm:text-sm">
           Create a new transaction proposal for the multisig wallet
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-          <p className="text-sm text-blue-300">
+      <CardContent className="space-y-4 sm:space-y-6">
+        <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-blue-300">
             <strong>Note:</strong> Transactions require approval from multisig owners before execution.
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="to" className="text-gray-300">
+          <Label htmlFor="to" className="text-gray-300 text-sm">
             Recipient Address
           </Label>
           <Input
@@ -137,12 +134,12 @@ export function TransactionForm() {
             placeholder="0x742d35Cc6634C0532925a3b8D4C9db96590c6C89"
             value={formData.to}
             onChange={(e) => handleInputChange("to", e.target.value)}
-            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="value" className="text-gray-300">
+          <Label htmlFor="value" className="text-gray-300 text-sm">
             Amount
           </Label>
           <Input
@@ -152,7 +149,7 @@ export function TransactionForm() {
             placeholder="0.0"
             value={formData.value}
             onChange={(e) => handleInputChange("value", e.target.value)}
-            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
           />
         </div>
 
@@ -163,14 +160,14 @@ export function TransactionForm() {
             onCheckedChange={(checked) => handleInputChange("isTokenTransfer", checked as boolean)}
             className="border-gray-600"
           />
-          <Label htmlFor="isTokenTransfer" className="text-gray-300">
+          <Label htmlFor="isTokenTransfer" className="text-gray-300 text-sm">
             Token Transfer
           </Label>
         </div>
 
         {formData.isTokenTransfer && (
           <div className="space-y-2">
-            <Label htmlFor="tokenAddress" className="text-gray-300">
+            <Label htmlFor="tokenAddress" className="text-gray-300 text-sm">
               Token Contract Address
             </Label>
             <Input
@@ -178,7 +175,7 @@ export function TransactionForm() {
               placeholder="0xA0b86a33E6441E6C7D3E4C5B4B6C7D8E9F0A1B2C"
               value={formData.tokenAddress}
               onChange={(e) => handleInputChange("tokenAddress", e.target.value)}
-              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+              className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
             <div className="flex flex-wrap gap-2 mt-2">
               {POPULAR_TOKENS.filter(t => t.address !== "0x0000000000000000000000000000000000000000").map((token) => (
@@ -187,7 +184,7 @@ export function TransactionForm() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleInputChange("tokenAddress", token.address)}
-                  className="border-gray-700 hover:bg-gray-800 text-gray-300"
+                  className="border-gray-700 hover:bg-gray-800 text-gray-300 text-xs"
                 >
                   {token.symbol}
                 </Button>
@@ -197,7 +194,7 @@ export function TransactionForm() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="data" className="text-gray-300">
+          <Label htmlFor="data" className="text-gray-300 text-sm">
             Transaction Data (Optional)
           </Label>
           <Textarea
@@ -205,7 +202,7 @@ export function TransactionForm() {
             placeholder="0x..."
             value={formData.data}
             onChange={(e) => handleInputChange("data", e.target.value)}
-            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+            className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             rows={3}
           />
         </div>
@@ -213,7 +210,7 @@ export function TransactionForm() {
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm sm:text-base"
               disabled={!isFormValid || isSubmitting || !isConnected}
             >
               {isSubmitting ? (
@@ -229,37 +226,37 @@ export function TransactionForm() {
               )}
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent className="bg-gray-900 border-gray-800">
+          <AlertDialogContent className="bg-gray-900 border-gray-800 max-w-[90vw] sm:max-w-lg">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-white flex items-center space-x-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <AlertDialogTitle className="text-white flex items-center space-x-2 text-base sm:text-lg">
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 flex-shrink-0" />
                 <span>Confirm Transaction Submission</span>
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-gray-400">
+              <AlertDialogDescription className="text-gray-400 text-xs sm:text-sm">
                 You are about to submit a transaction proposal to the multisig wallet:
-                <div className="mt-4 p-4 bg-gray-800 rounded-lg space-y-2">
-                  <div>
+                <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gray-800 rounded-lg space-y-2 text-xs sm:text-sm">
+                  <div className="break-all">
                     <strong>To:</strong> {formData.to}
                   </div>
                   <div>
                     <strong>Amount:</strong> {formData.value} {formData.isTokenTransfer ? "tokens" : "ETH"}
                   </div>
                   {formData.isTokenTransfer && (
-                    <div>
+                    <div className="break-all">
                       <strong>Token:</strong> {formData.tokenAddress}
                     </div>
                   )}
                 </div>
-                <p className="mt-4 text-yellow-400">
+                <p className="mt-3 sm:mt-4 text-yellow-400 text-xs sm:text-sm">
                   This transaction will require approval from multisig owners before execution.
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700">
+            <AlertDialogFooter className="flex-col sm:flex-row space-y-2 sm:space-y-0">
+              <AlertDialogCancel className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700 w-full sm:w-auto">
                 Cancel
               </AlertDialogCancel>
-              <AlertDialogAction onClick={submitTransaction} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <AlertDialogAction onClick={submitTransaction} className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto">
                 Submit Proposal
               </AlertDialogAction>
             </AlertDialogFooter>
