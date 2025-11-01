@@ -4,48 +4,64 @@
 import { useState, useEffect, useCallback } from "react"
 import { web3Service } from "@/lib/web3"
 import { useToast } from "@/hooks/use-toast"
-import { isSupportedChain, getNetworkName, getTargetChainId } from "@/lib/networks" // Import network helpers
+import { 
+  isSupportedChain, 
+  getNetworkName, 
+  getTargetChainId,
+  SUPPORTED_CHAINS 
+} from "@/lib/networks"
 
 export function useWeb3() {
   const [isConnected, setIsConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isSwitching, setIsSwitching] = useState(false)
   const [networkName, setNetworkName] = useState("Unsupported Network")
   const [isSupported, setIsSupported] = useState(false)
+  const [chainId, setChainId] = useState<number | undefined>()
   const { toast } = useToast()
+  
 
-  const checkNetwork = useCallback(async () => {
-    if (!web3Service.isConnected()) {
-      setIsSupported(false)
-      setNetworkName("Not Connected")
-      return
-    }
-    
-    try {
-      const netInfo = await web3Service.getNetworkInfo()
-      if (netInfo) {
-        const supported = isSupportedChain(netInfo.chainId)
-        const name = getNetworkName(netInfo.chainId, netInfo.name)
-        setIsSupported(supported)
-        setNetworkName(name)
-        
-        if (!supported) {
-           toast({
-            title: "Wrong Network",
-            description: `Please switch to the ${getNetworkName(getTargetChainId(), "target")} network.`,
-            variant: "destructive",
-          })
-        }
-      } else {
-        setIsSupported(false)
-        setNetworkName("Unknown Network")
+ const checkNetwork = useCallback(async () => {
+  if (!web3Service.isConnected()) {
+    setIsSupported(false)
+    setNetworkName("Not Connected")
+    setChainId(undefined)  // ← ADD THIS LINE
+    return
+  }
+
+  try {
+    const netInfo = await web3Service.getNetworkInfo()
+    if (netInfo) {
+      const chainIdNum = Number(netInfo.chainId)
+      setChainId(chainIdNum)  // ← ADD THIS LINE (track the chain ID)
+      
+      const supported = isSupportedChain(chainIdNum)
+      const name = getNetworkName(chainIdNum, netInfo.name)
+      setIsSupported(supported)
+      setNetworkName(name)
+
+      if (!supported) {
+        toast({
+          title: "Wrong Network",
+          description: `Please switch to the ${getNetworkName(getTargetChainId(), "target")} network.`,
+          variant: "destructive",
+        })
       }
-    } catch (error) {
-      console.error("Could not get network info:", error)
+    } else {
       setIsSupported(false)
-      setNetworkName("Network Error")
+      setNetworkName("Unknown Network")
+      setChainId(undefined)  // ← ADD THIS LINE
     }
-  }, [toast])
+  } catch (error) {
+    console.error("Could not get network info:", error)
+    setIsSupported(false)
+    setNetworkName("Network Error")
+    setChainId(undefined)  // ← ADD THIS LINE
+  }
+}, [toast])
+
+
 
   const connect = useCallback(async () => {
     setIsConnecting(true)
@@ -77,6 +93,7 @@ export function useWeb3() {
     setWalletAddress("")
     setIsSupported(false)
     setNetworkName("Not Connected")
+    setChainId(undefined)
 
     toast({
       title: "Wallet Disconnected",
@@ -85,18 +102,42 @@ export function useWeb3() {
     })
   }, [toast])
 
-  const switchNetwork = useCallback(async () => {
+  /**
+   * Switch to a specific network
+   * @param targetChainId The chain ID to switch to (defaults to target chain from config)
+   */
+  const switchNetwork = useCallback(
+  async (targetChainId?: number) => {  // ← NOW ACCEPTS OPTIONAL CHAINID
+    setIsSwitching(true)                // ← SHOW LOADING
     try {
-      await web3Service.switchNetwork()
-      // The chainChanged event will handle the reload
+      // Call web3Service with the provided chainId (or undefined for target)
+      await web3Service.switchNetwork(targetChainId)
+      
+      // Update network info for faster feedback
+      await checkNetwork()
+      
+      toast({
+        title: "Network Switched",
+        description: `Switched to ${getNetworkName(targetChainId || getTargetChainId(), "network")}`,
+        className: "bg-green-600 text-white border-green-700",
+      })
     } catch (error: any) {
+      console.error("Network switch error:", error)
       toast({
         title: "Network Switch Failed",
-        description: error.message || "Could not switch network.",
+        description: error.message || "Could not switch network. Please switch manually in your wallet.",
         variant: "destructive",
       })
+    } finally {
+      setIsSwitching(false)  // ← HIDE LOADING
     }
-  }, [toast])
+  },
+  [toast, checkNetwork]
+)
+
+  // Calculate if on target chain
+  const targetChainId = getTargetChainId()
+  const isOnTargetChain = chainId === targetChainId
 
   // Check if wallet is already connected on mount
   useEffect(() => {
@@ -125,7 +166,7 @@ export function useWeb3() {
     }
 
     checkConnection()
-  }, [checkNetwork]) // Add checkNetwork dependency
+  }, [checkNetwork])
 
   // Listen for account changes
   useEffect(() => {
@@ -161,16 +202,19 @@ export function useWeb3() {
         window.ethereum.removeListener("chainChanged", handleChainChanged)
       }
     }
-  }, [walletAddress, disconnect, checkNetwork]) // Add checkNetwork dependency
+  }, [walletAddress, disconnect, checkNetwork])
 
-  return {
-    isConnected,
-    walletAddress,
-    isConnecting,
-    networkName,
-    isSupported,
-    connect,
-    disconnect,
-    switchNetwork, // Expose the switch function
-  }
+  // UPDATE your return statement to add new exports:
+return {
+  isConnected,
+  walletAddress,
+  isConnecting,
+  isSwitching,        // ← ADD THIS
+  networkName,
+  isSupported,
+  chainId,            // ← ADD THIS
+  connect,
+  disconnect,
+  switchNetwork,      // Already exists, just now accepts chainId param
+}
 }

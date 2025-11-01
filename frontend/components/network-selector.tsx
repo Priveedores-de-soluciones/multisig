@@ -1,40 +1,103 @@
 "use client"
 
-import { useWeb3 } from "@/hooks/use-web3" // Import our manual hook - UPDATED PATH
+import { useWeb3 } from "@/hooks/use-web3"
 import { Button } from "@/components/ui/button"
-import { Network } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import { Network, Check, AlertCircle, Loader2 } from "lucide-react"
+import { SUPPORTED_CHAINS } from "@/lib/networks"
 
 export function NetworkSelector() {
-  // Get all network info and functions from our hook
-  const { isConnected, networkName, isSupported, switchNetwork } = useWeb3()
+  const { 
+    isConnected, 
+    networkName, 
+    isSupported, 
+    chainId, 
+    switchNetwork, 
+    isSwitching 
+  } = useWeb3()
 
-  // Don't show if not connected
   if (!isConnected) {
     return null
   }
-  
-  const handleNetworkClick = () => {
-    if (!isSupported) {
-      // If not on the correct network, clicking tries to switch
-      switchNetwork()
-    }
-    // If already on the correct network, you could still call switchNetwork()
-    // to open the wallet's network modal, or just do nothing.
-    // Calling it anyway provides a consistent "open network menu" feel.
-    // switchNetwork() 
+
+  // Get list of supported networks
+  const supportedNetworks = Object.entries(SUPPORTED_CHAINS).map(([id, name]) => ({
+    chainId: Number(id),
+    name,
+  }))
+
+  const handleSwitchNetwork = (targetChainId: number) => {
+    switchNetwork(targetChainId)
   }
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleNetworkClick} // Click tries to switch if unsupported
-      className={`border-gray-600 hover:bg-gray-800 bg-transparent space-x-2 ${
-        !isSupported ? 'border-red-600 text-red-400' : 'border-green-600/50 text-green-400'
-      }`}
-    >
-      <Network className="h-4 w-4" />
-      <span className="hidden sm:inline">{networkName}</span>
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isSwitching}
+          className={`border-gray-600 hover:bg-gray-800 bg-transparent space-x-2 ${
+            !isSupported
+              ? "border-red-600 text-red-400"
+              : "border-green-600/50 text-green-400"
+          }`}
+        >
+          {isSwitching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Network className="h-4 w-4" />
+          )}
+          <span className="hidden sm:inline">{networkName}</span>
+          {!isSupported && !isSwitching && <AlertCircle className="h-3 w-3" />}
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="text-xs text-gray-400">
+          Select Network
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+
+        {supportedNetworks.map((network) => {
+          const isActive = chainId === network.chainId
+          return (
+            <DropdownMenuItem
+              key={network.chainId}
+              onClick={() => handleSwitchNetwork(network.chainId)}
+              disabled={isSwitching}
+              className="cursor-pointer flex items-center justify-between"
+            >
+              <span
+                className={
+                  isActive
+                    ? "font-semibold text-green-400"
+                    : "text-gray-300"
+                }
+              >
+                {network.name}
+              </span>
+              {isActive && <Check className="h-4 w-4 text-green-400" />}
+            </DropdownMenuItem>
+          )
+        })}
+
+        {!isSupported && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-2 text-xs text-red-400">
+              ⚠️ Current network is not supported
+            </div>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
