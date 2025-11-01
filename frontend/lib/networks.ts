@@ -2,8 +2,8 @@
 
 // --- CONFIGURATION ---
 // SET YOUR DEFAULT TARGET NETWORK HERE
-const TARGET_CHAIN_ID = 8453 // Base Mainnet
-const TARGET_CHAIN_NAME = "Base"
+const TARGET_CHAIN_ID = 84532 // Base Mainnet
+const TARGET_CHAIN_NAME = "Base Sepolia"
 
 // Add all networks your app supports
 const SUPPORTED_CHAINS: { [key: number]: string } = {
