@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client"
 import { WalletConnection } from "@/components/wallet-connection"
 import { Dashboard } from "@/components/dashboard"
@@ -7,12 +6,13 @@ import { TokenManagement } from "@/components/token-management"
 import { AdminSettings } from "@/components/admin-settings"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Wallet, Send, Coins, Settings, List } from "lucide-react"
-import { useAppKitAccount } from "@reown/appkit/react" // Use AppKit hook
+import { useWeb3 } from "@/hooks/use-web3" // Import our local hook - UPDATED PATH
+// import { useAppKitAccount } from "@reown/appkit/react" // REMOVED
 import { TransactionManager } from "@/components/transaction"
-import { NetworkSelector } from "@/components/network-selector" // Import new component
+import { NetworkSelector } from "@/components/network-selector" // This import is still correct
 
 export default function MultiSigWallet() {
-  const { isConnected } = useAppKitAccount() // Use AppKit's hook
+  const { isConnected } = useWeb3() // Use our local hook
 
   return (
     <div className="min-h-screen bg-[#171717] text-white">

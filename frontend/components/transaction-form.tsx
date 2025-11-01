@@ -21,7 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Send, AlertTriangle, FileText } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3"
+import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { truncateAddress } from "@/lib/utils"
 import { POPULAR_TOKENS } from "@/lib/constants"
 

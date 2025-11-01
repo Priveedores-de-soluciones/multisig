@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { RefreshCw, Wallet, User, Shield, TrendingUp, Users } from "lucide-react"
 import { web3Service } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3"
+import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { ethers } from "ethers"
 import { truncateAddress, formatBalance } from "@/lib/utils"
 import { POPULAR_TOKENS } from "@/lib/constants"
@@ -29,7 +29,7 @@ export function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const refreshBalances = async () => {
-    if (!isConnected || !web3Service.hasSigner()) {
+    if (!isConnected || !web3Service.isConnected()) { // UPDATED CHECK
       console.log("Skipping refresh - wallet not ready")
       return
     }
@@ -108,7 +108,7 @@ export function Dashboard() {
   useEffect(() => {
     if (isConnected) {
       const timer = setTimeout(() => {
-        if (web3Service.hasSigner()) {
+        if (web3Service.isConnected()) { // UPDATED CHECK
           refreshBalances()
         }
       }, 100)
