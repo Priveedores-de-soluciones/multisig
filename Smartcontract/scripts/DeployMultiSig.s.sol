@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import "../src/multisig.sol";
 import "../src/wallet.sol";
 
-contract DeploySimple is Script {
+contract DeployMultiSig is Script {
     function run()
         external
         returns (address deployedWallet, address deployedController)

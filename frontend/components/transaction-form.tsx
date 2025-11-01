@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { ethers } from "ethers"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +24,7 @@ import { Send, AlertTriangle, FileText } from "lucide-react"
 import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { truncateAddress } from "@/lib/utils"
-import { POPULAR_TOKENS } from "@/lib/constants"
+import { Token } from "@/lib/constants" // Import Token interface
 
 export function TransactionForm() {
   const { isConnected } = useWeb3()
@@ -35,7 +36,25 @@ export function TransactionForm() {
     data: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [popularTokens, setPopularTokens] = useState<readonly Token[]>([]) // New state for dynamic tokens
   const { toast } = useToast()
+  
+  // Fetch tokens on connection/chain change
+  useEffect(() => {
+    const fetchTokens = async () => {
+      if (isConnected) {
+        try {
+          const tokens = await web3Service.getPopularTokens()
+          setPopularTokens(tokens)
+        } catch (e) {
+          console.error("Failed to fetch popular tokens:", e)
+        }
+      } else {
+        setPopularTokens([])
+      }
+    }
+    fetchTokens()
+  }, [isConnected])
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -55,11 +74,15 @@ export function TransactionForm() {
     try {
       let tokenDecimals = 18
       if (formData.isTokenTransfer && formData.tokenAddress) {
-        const token = POPULAR_TOKENS.find(
+        // Find token details from the dynamically loaded list
+        const token = popularTokens.find(
           t => t.address.toLowerCase() === formData.tokenAddress.toLowerCase()
         )
         if (token) {
           tokenDecimals = token.decimals
+        } else {
+           // If custom token, assume 18 decimals, but warn or fetch decimals in a real app
+           console.warn("Using default 18 decimals for custom token.")
         }
       }
 
@@ -178,7 +201,8 @@ export function TransactionForm() {
               className="bg-gray-800 border-gray-700 text-white placeholder-gray-500 text-sm"
             />
             <div className="flex flex-wrap gap-2 mt-2">
-              {POPULAR_TOKENS.filter(t => t.address !== "0x0000000000000000000000000000000000000000").map((token) => (
+              {/* Use dynamically loaded popularTokens */}
+              {popularTokens.filter(t => t.address !== ethers.ZeroAddress).map((token) => (
                 <Button
                   key={token.symbol}
                   variant="outline"

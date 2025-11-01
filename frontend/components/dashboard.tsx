@@ -9,16 +9,16 @@ import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
 import { ethers } from "ethers"
 import { truncateAddress, formatBalance } from "@/lib/utils"
-import { POPULAR_TOKENS } from "@/lib/constants"
+import { Token, CHAIN_POPULAR_TOKENS } from "@/lib/constants" // Import Token interface
 import { useToast } from "@/hooks/use-toast"
 
 export function Dashboard() {
   const { isConnected, walletAddress } = useWeb3()
   const { toast } = useToast()
-  const [balances, setBalances] = useState({
-    eth: "0.0",
-    usdc: "0.0",
-  })
+  
+  const [nativeToken, setNativeToken] = useState<Token | undefined>(undefined) // State for native token details
+  const [balances, setBalances] = useState<{ [symbol: string]: string }>({}) // Use an object for balances
+  
   const [contractInfo, setContractInfo] = useState({
     owner: "",
     controller: "",
@@ -29,26 +29,39 @@ export function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const refreshBalances = async () => {
-    if (!isConnected || !web3Service.isConnected()) { // UPDATED CHECK
+    if (!isConnected || !web3Service.isConnected()) { 
       console.log("Skipping refresh - wallet not ready")
       return
     }
 
     setIsRefreshing(true)
     try {
-      const ethBalance = await web3Service.getBalance()
-      const usdcToken = POPULAR_TOKENS.find((t) => t.symbol === "USDC")
-      let usdcBalance = "0.0"
+      const native = await web3Service.getNativeToken()
+      if (!native) throw new Error("Could not load native token info for current chain.");
+      setNativeToken(native)
+      
+      const allPopularTokens = await web3Service.getPopularTokens()
 
-      if (usdcToken) {
-        usdcBalance = await web3Service.getTokenBalance(usdcToken.address, usdcToken.decimals)
+      const newBalances: { [symbol: string]: string } = {}
+      
+      // 1. Get Native Token Balance (using native token symbol)
+      const nativeBalance = await web3Service.getBalance()
+      newBalances[native.symbol] = nativeBalance
+      
+      // 2. Get other Popular Token Balances
+      for (const token of allPopularTokens) {
+        if (token.address !== ethers.ZeroAddress) {
+          try {
+            const tokenBalance = await web3Service.getTokenBalance(token.address, token.decimals)
+            newBalances[token.symbol] = tokenBalance
+          } catch (e) {
+            newBalances[token.symbol] = "0.0"
+          }
+        }
       }
-
-      setBalances({
-        eth: ethBalance,
-        usdc: usdcBalance,
-      })
-
+      setBalances(newBalances)
+      
+      // 3. Get Contract Info
       const [owner, controller, ownersData, requiredPercentage] = await Promise.all([
         web3Service.getOwner(),
         web3Service.getController(),
@@ -69,6 +82,7 @@ export function Dashboard() {
         requiredPercentage,
       })
 
+      // 4. Get Pending Transactions
       const txCount = await web3Service.getTransactionCount()
       const pending = []
       
@@ -79,9 +93,15 @@ export function Dashboard() {
           pending.push({
             id: i,
             to: tx.to,
-            value: ethers.formatEther(tx.value),
+            // Format value based on token type
+            value: tx.isTokenTransfer 
+                   ? ethers.formatUnits(tx.value, allPopularTokens.find(t => t.address.toLowerCase() === tx.tokenAddress.toLowerCase())?.decimals || 18)
+                   : ethers.formatEther(tx.value),
             confirmations: Number(tx.confirmationCount),
             isTokenTransfer: tx.isTokenTransfer,
+            tokenSymbol: tx.isTokenTransfer 
+                         ? allPopularTokens.find(t => t.address.toLowerCase() === tx.tokenAddress.toLowerCase())?.symbol || "Tokens" 
+                         : native.symbol,
           })
         }
       }
@@ -90,7 +110,7 @@ export function Dashboard() {
 
       toast({
         title: "Dashboard Updated",
-        description: "Latest wallet information has been fetched",
+        description: `Latest wallet information for ${native.name} has been fetched`,
         className: "bg-green-600 text-white border-green-700",
       })
     } catch (error: any) {
@@ -107,8 +127,9 @@ export function Dashboard() {
 
   useEffect(() => {
     if (isConnected) {
+      // Small timeout to ensure web3Service has updated its provider/signer after connection
       const timer = setTimeout(() => {
-        if (web3Service.isConnected()) { // UPDATED CHECK
+        if (web3Service.isConnected()) { 
           refreshBalances()
         }
       }, 100)
@@ -117,31 +138,55 @@ export function Dashboard() {
     }
   }, [isConnected])
 
+  // Helper for rendering balance cards (now dynamic)
+  const renderBalanceCard = (token: Token, balance: string) => (
+    <Card className="bg-gray-900 border-gray-800" key={token.symbol}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-gray-300">{token.symbol} Balance</CardTitle>
+        <Wallet className="h-4 w-4 text-blue-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-xl sm:text-2xl font-bold text-white break-all">
+          {formatBalance(balance)} {token.symbol}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">{token.name} ({nativeToken?.name} Network)</p>
+      </CardContent>
+    </Card>
+  )
+  
+  // Get the popular tokens to display on the dashboard (e.g., native + one stablecoin/popular token)
+  const tokensToDisplay = []
+  if (nativeToken) {
+    tokensToDisplay.push(nativeToken)
+    // Find a second token (e.g., USDC, cUSD) to display next to the native one
+    const secondToken = (Object.values(CHAIN_POPULAR_TOKENS[web3Service.getNetworkInfo()?.chainId || 0] || {}) as readonly Token[])
+      .find(t => t.address !== ethers.ZeroAddress)
+    
+    if (secondToken) {
+        tokensToDisplay.push(secondToken)
+    }
+  }
+  
+  if (!isConnected) {
+    return (
+      <Card className="bg-gray-900 border-gray-800 w-full max-w-4xl mx-auto">
+        <CardContent className="pt-6">
+          <div className="text-center py-6">
+            <p className="text-gray-400">Please connect your wallet...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+  
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
-      {/* Balance Cards */}
+      {/* Balance Cards (Dynamic) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-        <Card className="bg-gray-900 border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">ETH Balance</CardTitle>
-            <Wallet className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl sm:text-2xl font-bold text-white break-all">{formatBalance(balances.eth)} ETH</div>
-            <p className="text-xs text-gray-500 mt-1">≈ ${(Number.parseFloat(balances.eth) * 2400).toFixed(2)} USD</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-900 border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-300">USDC Balance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl sm:text-2xl font-bold text-white break-all">{formatBalance(balances.usdc)} USDC</div>
-            <p className="text-xs text-gray-500 mt-1">USD Coin (Base Sepolia)</p>
-          </CardContent>
-        </Card>
+        {tokensToDisplay.slice(0, 2).map(token => {
+          const balance = balances[token.symbol] || "0.0"
+          return renderBalanceCard(token, balance)
+        })}
       </div>
 
       {/* Contract Info and Multisig Status */}
@@ -244,11 +289,11 @@ export function Dashboard() {
                       Transaction #{tx.id}
                     </span>
                     <span className="text-xs text-gray-400 break-all">
-                      {tx.isTokenTransfer ? "Token Transfer" : "ETH Transfer"} to {truncateAddress(tx.to)}
+                      {tx.isTokenTransfer ? `${tx.tokenSymbol} Transfer` : `${nativeToken?.symbol || 'Native'} Transfer`} to {truncateAddress(tx.to)}
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 self-end sm:self-auto">
-                    <span className="text-xs sm:text-sm text-white">{tx.value} {tx.isTokenTransfer ? "" : "ETH"}</span>
+                    <span className="text-xs sm:text-sm text-white">{tx.value} {tx.tokenSymbol}</span>
                     <Badge variant="outline" className="border-yellow-600 text-yellow-400 text-xs">
                       {tx.confirmations} confirmations
                     </Badge>

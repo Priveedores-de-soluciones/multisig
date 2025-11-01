@@ -30,11 +30,14 @@ import {
   RefreshCw
 } from "lucide-react"
 import { web3Service, FullTransaction } from "@/lib/web3"
-import { useWeb3 } from "@/hooks/use-web3" // UPDATED PATH
+import { useWeb3 } from "@/hooks/use-web3" 
 import { ethers } from "ethers"
 import { truncateAddress } from "@/lib/utils"
-import { POPULAR_TOKENS } from "@/lib/constants"
 import { useToast } from "@/components/ui/use-toast"
+// --- IMPORT BOTH ABIs ---
+import { MULTISIG_CONTROLLER_ABI, COMPANY_WALLET_ABI } from "@/lib/abis" 
+import { Token } from "@/lib/constants" // Import Token interface
+
 
 // NEW interface
 interface OwnerDetails {
@@ -47,8 +50,152 @@ interface OwnerDetails {
 interface TransactionModalDetails {
   confirmedBy: OwnerDetails[]
   pendingBy: OwnerDetails[]
-  initiatorName: string // Changed from initiator
+  initiatorName: string
 }
+
+// ---------------------------------------------
+// --- TRANSACTION DECODING LOGIC (EXTERNAL) ---
+// ---------------------------------------------
+
+// 1. Setup Interfaces for Decoding (moved outside to prevent re-creation on render)
+const CONTROLLER_INTERFACE = new ethers.Interface(MULTISIG_CONTROLLER_ABI)
+const WALLET_INTERFACE = new ethers.Interface(COMPANY_WALLET_ABI)
+const ERC20_ABI = [
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)"
+]
+const ERC20_INTERFACE = new ethers.Interface(ERC20_ABI)
+
+/**
+ * Helper to determine the display value for ETH or Token.
+ * It now takes the dynamically fetched token list.
+ */
+const getTransactionValue = (tx: FullTransaction, allTokens: readonly Token[]): string => {
+  if (tx.isTokenTransfer) {
+    const token = allTokens.find(t => t.address.toLowerCase() === tx.tokenAddress.toLowerCase())
+    const decimals = token ? token.decimals : 18
+    const symbol = token ? token.symbol : "Tokens"
+    return `${ethers.formatUnits(tx.value, decimals)} ${symbol}`
+  }
+  const nativeToken = allTokens.find(t => t.address === ethers.ZeroAddress)
+  const nativeSymbol = nativeToken ? nativeToken.symbol : "ETH"
+  return `${ethers.formatEther(tx.value)} ${nativeSymbol}`
+}
+
+
+/**
+ * Decodes a FullTransaction's data and value to return a human-readable description.
+ * This function now accepts contract addresses and tokens dynamically.
+ */
+const getTransactionDescription = (
+  tx: FullTransaction, 
+  contractAddresses: { controller: string, wallet: string },
+  allTokens: readonly Token[]
+): string => {
+  const toAddress = tx.to.toLowerCase()
+  const controllerAddress = contractAddresses.controller.toLowerCase()
+  const walletAddress = contractAddresses.wallet.toLowerCase()
+
+  // 1. MultiSig Controller Configuration Calls (Admin Proposals)
+  if (toAddress === controllerAddress) {
+    try {
+      const decoded = CONTROLLER_INTERFACE.parseTransaction({ data: tx.data })
+      
+      if (decoded) {
+        switch (decoded.name) {
+          case 'submitAddOwner':
+            return `🔥 PROPOSAL: Add Owner ${decoded.args[1]} (${decoded.args[2].toString()}%)`
+          case 'submitRemoveOwner':
+            return `❌ PROPOSAL: Remove Owner ${truncateAddress(decoded.args[0])}`
+          case 'submitChangeRequiredPercentage':
+            return `⚙️ PROPOSAL: Change Required % to ${decoded.args[0].toString()}%`
+          case 'pause':
+            return `⏸️ PROPOSAL: Pause Controller`
+          case 'unpause':
+            return `▶️ PROPOSAL: Unpause Controller`
+          case 'test':
+            return `🐞 CALL TEST FUNCTION (Controller)`
+          default:
+            return `Controller Action: ${decoded.name}`
+        }
+      }
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // 2. Company Wallet Calls (Internal Execution Logic)
+  if (toAddress === walletAddress) {
+    try {
+      const decoded = WALLET_INTERFACE.parseTransaction({ data: tx.data })
+      if (decoded) {
+        switch(decoded.name) {
+          case 'executeTransaction':
+            const innerTo = decoded.args[0]
+            const innerIsToken = decoded.args[2]
+            const innerValue = innerIsToken 
+              ? getTransactionValue({ ...tx, to: innerTo, value: decoded.args[1], tokenAddress: decoded.args[3] }, allTokens) 
+              : getTransactionValue({ ...tx, to: innerTo, value: decoded.args[1] }, allTokens)
+            
+            try {
+              const innerDataDecoded = ERC20_INTERFACE.parseTransaction({ data: decoded.args[4] })
+              if (innerDataDecoded?.name === 'approve') {
+                return `🔑 Wallet Action: ERC20 **Approve** on ${truncateAddress(innerTo)}`
+              }
+            } catch {}
+
+            return `⚡ Wallet Execution: Send ${innerValue} to ${truncateAddress(innerTo)}`
+          
+          case 'setController':
+            return `🔗 Wallet Action: Change Controller to ${truncateAddress(decoded.args[0])}`
+          case 'renounceOwnership':
+             return `🚫 Wallet Action: Renounce Ownership`
+          default:
+            return `Wallet Action: ${decoded.name}`
+        }
+      }
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  // 3. Token Transfer (Standard ERC20 interaction)
+  if (tx.isTokenTransfer) {
+    const value = getTransactionValue(tx, allTokens) 
+    try {
+        const decoded = ERC20_INTERFACE.parseTransaction({ data: tx.data })
+        if (decoded?.name === 'transfer') {
+             return `💰 Send ${value} to ${truncateAddress(decoded.args[0])}`
+        }
+        if (decoded?.name === 'approve') {
+             return `🔑 ERC20 Approve on ${truncateAddress(tx.to)}`
+        }
+    } catch (e) {
+        // Not a standard ERC20 function
+    }
+    return `🔗 Token Interaction: ${value} to ${truncateAddress(tx.to)}`
+  }
+  
+  // 4. Simple Native Token Transfer
+  if (tx.data === "0x" && tx.value > 0n) {
+    const nativeToken = allTokens.find(t => t.address === ethers.ZeroAddress)
+    const value = ethers.formatEther(tx.value)
+    return `💸 Send ${value} ${nativeToken?.symbol || 'ETH'} to ${truncateAddress(tx.to)}`
+  }
+
+  // 5. Arbitrary Contract Interaction (Unknown ABI, default to signature)
+  if (tx.data !== "0x") {
+    const functionSig = tx.data.substring(0, 10)
+    return `📜 Contract Interaction (${functionSig}...) to ${truncateAddress(tx.to)}`
+  }
+
+  // 6. Final Fallback (0 value, no data)
+  return `❓ Unknown Transaction to ${truncateAddress(tx.to)}`
+}
+
+// ---------------------------------------------
+// --- COMPONENT START ---
+// ---------------------------------------------
 
 export function TransactionManager() {
   const { isConnected } = useWeb3()
@@ -64,6 +211,11 @@ export function TransactionManager() {
   const [isLoading, setIsLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({})
   const [isTesting, setIsTesting] = useState(false)
+  
+  // New states for dynamic contract/token data
+  const [contractAddresses, setContractAddresses] = useState({ controller: "", wallet: "" })
+  const [popularTokens, setPopularTokens] = useState<readonly Token[]>([])
+  const [explorerBaseUrl, setExplorerBaseUrl] = useState("")
 
   useEffect(() => {
     const storedIgnored = localStorage.getItem("ignoredTxs")
@@ -71,6 +223,35 @@ export function TransactionManager() {
       setIgnoredTxs(new Set(JSON.parse(storedIgnored)))
     }
   }, [])
+  
+  const fetchChainData = useCallback(async () => {
+    if (!isConnected) return
+    
+    try {
+      const [walletAddr, controllerAddr, allTokens, networkInfo] = await Promise.all([
+        web3Service.getCompanyWalletAddress(),
+        web3Service.getController(),
+        web3Service.getPopularTokens(),
+        web3Service.getNetworkInfo(),
+      ])
+
+      setContractAddresses({ controller: controllerAddr, wallet: walletAddr })
+      setPopularTokens(allTokens)
+      
+      // Determine explorer base URL dynamically
+      let explorerUrl = "https://etherscan.io";
+      if (networkInfo?.chainId === 84532) explorerUrl = "https://sepolia.basescan.org";
+      else if (networkInfo?.chainId === 421614) explorerUrl = "https://sepolia.arbiscan.io";
+      else if (networkInfo?.chainId === 11142220) explorerUrl = "https://celo-sepolia.celoscan.io";
+      setExplorerBaseUrl(explorerUrl);
+      
+    } catch (error) {
+      console.error("Error fetching chain data for decoding:", error)
+      // Fallback addresses for a less disruptive UI
+      setContractAddresses({ controller: "0x0", wallet: "0x0" }) 
+      setPopularTokens([])
+    }
+  }, [isConnected])
 
   const updateIgnoredTxs = (newSet: Set<string>) => {
     setIgnoredTxs(newSet)
@@ -87,16 +268,6 @@ export function TransactionManager() {
     const newSet = new Set(ignoredTxs)
     newSet.delete(txId.toString())
     updateIgnoredTxs(newSet)
-  }
-
-  const getTransactionValue = (tx: FullTransaction): string => {
-    if (tx.isTokenTransfer) {
-      const token = POPULAR_TOKENS.find(t => t.address.toLowerCase() === tx.tokenAddress.toLowerCase())
-      const decimals = token ? token.decimals : 18
-      const symbol = token ? token.symbol : "Tokens"
-      return `${ethers.formatUnits(tx.value, decimals)} ${symbol}`
-    }
-    return `${ethers.formatEther(tx.value)} ETH`
   }
 
   const getTransactionStatus = (tx: FullTransaction): { text: string; color: string } => {
@@ -119,6 +290,10 @@ export function TransactionManager() {
   const fetchTransactionHistory = useCallback(async () => {
     if (!isConnected) return
     setIsLoading(true)
+    
+    // Ensure chain data is fetched before transactions
+    await fetchChainData(); 
+    
     try {
       const [txs, reqPercent] = await Promise.all([
         web3Service.getAllTransactions(),
@@ -136,7 +311,7 @@ export function TransactionManager() {
     } finally {
       setIsLoading(false)
     }
-  }, [isConnected, toast])
+  }, [isConnected, toast, fetchChainData])
 
   useEffect(() => {
     if (isConnected) {
@@ -151,7 +326,6 @@ export function TransactionManager() {
 
     try {
       // 1. Fetch all owner data, including names
-      // (Assuming web3Service.getOwners() now returns { addresses, names, percentages })
       const { addresses, names, percentages } = await web3Service.getOwners()
       
       // 2. Create a lookup map for all owners
@@ -163,7 +337,6 @@ export function TransactionManager() {
       // 3. Find initiator's name
       const initiatorAddress = tx.initiator.toLowerCase()
       const initiatorInfo = ownerMap.get(initiatorAddress)
-      // Fallback to truncated address if (somehow) not found
       const initiatorName = initiatorInfo ? initiatorInfo.name : truncateAddress(tx.initiator)
 
       // 4. Build confirmed/pending lists
@@ -172,7 +345,6 @@ export function TransactionManager() {
 
       for (let i = 0; i < addresses.length; i++) {
         const ownerAddress = addresses[i]
-        // We can be sure the owner exists in the map
         const ownerInfo = ownerMap.get(ownerAddress.toLowerCase())! 
         
         const hasConfirmed = await web3Service.hasConfirmed(tx.id, ownerAddress)
@@ -270,11 +442,9 @@ export function TransactionManager() {
     return true
   })
 
-  const openExplorerLink = (hash: string) => {
-    const explorerUrl = `https://sepolia.basescan.org/tx/${hash}`
-    window.open(explorerUrl, "_blank")
-  }
-
+  // Check if we have the necessary data for decoding/display
+  const isDataReady = contractAddresses.controller && contractAddresses.wallet && popularTokens.length > 0;
+  
   if (!isConnected) {
     return (
       <Card className="bg-gray-900 border-gray-800">
@@ -339,17 +509,19 @@ export function TransactionManager() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading || !isDataReady ? (
             <div className="text-center py-12">
               <Loader2 className="h-8 w-8 text-blue-500 mx-auto mb-4 animate-spin" />
-              <p className="text-gray-400 text-sm">Loading transaction history...</p>
+              <p className="text-gray-400 text-sm">Loading transaction history and chain data...</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
               {filteredTransactions.length > 0 ? (
                 filteredTransactions.map((tx) => {
                   const status = getTransactionStatus(tx)
-                  const value = getTransactionValue(tx)
+                  // --- NEW: Use the decoding function with dynamic data ---
+                  const description = getTransactionDescription(tx, contractAddresses, popularTokens)
+                  
                   const txIdStr = tx.id.toString()
                   const isIgnored = ignoredTxs.has(txIdStr)
                   
@@ -370,7 +542,8 @@ export function TransactionManager() {
                           </div>
 
                           <p className="text-white text-sm sm:text-lg font-medium mb-3 break-all">
-                            Send {value} to {truncateAddress(tx.to)}
+                            {/* --- DISPLAY THE DECODED DESCRIPTION HERE --- */}
+                            {description}
                           </p>
 
                           <div className="flex flex-col space-y-3">
@@ -449,7 +622,7 @@ export function TransactionManager() {
               Transaction Details (ID: {selectedTx?.id.toString()})
             </DialogTitle>
           </DialogHeader>
-          {isModalLoading ? (
+          {isModalLoading || !isDataReady ? (
             <div className="text-center py-12">
               <Loader2 className="h-8 w-8 text-blue-500 mx-auto mb-4 animate-spin" />
               <p className="text-gray-400 text-sm">Loading confirmation details...</p>
@@ -457,23 +630,32 @@ export function TransactionManager() {
           ) : (
             <div className="space-y-4">
               <div className="space-y-2 text-xs sm:text-sm">
+                 <div>
+                    <span className="text-gray-400">Action:</span>
+                    <p className="font-medium text-lg text-blue-300">
+                        {/* Dynamic decoding in modal */}
+                        {selectedTx && getTransactionDescription(selectedTx, contractAddresses, popularTokens)}
+                    </p>
+                 </div>
                 <div>
                   <span className="text-gray-400">To Address:</span>
                   <p className="font-mono break-all">{selectedTx?.to}</p>
                 </div>
                 <div>
                   <span className="text-gray-400">Value:</span>
-                  <p className="font-mono break-all">{selectedTx ? getTransactionValue(selectedTx) : 'N/A'}</p>
+                  <p className="font-mono break-all">
+                    {/* Dynamic value in modal */}
+                    {selectedTx && getTransactionValue(selectedTx, popularTokens)}
+                  </p>
                 </div>
                 
-                {/* --- UPDATED INITIATOR --- */}
                 <div>
                   <span className="text-gray-400">Initiator:</span>
                   <p className="font-mono break-all">
-                    {modalDetails?.initiatorName ? (
+                    {modalDetails?.initiatorName && selectedTx ? (
                       <>
                         <span className="text-white font-medium">{modalDetails.initiatorName}</span>
-                        <span className="text-gray-500 ml-2">({truncateAddress(selectedTx!.initiator)})</span>
+                        <span className="text-gray-500 ml-2">({truncateAddress(selectedTx.initiator)})</span>
                       </>
                     ) : (
                       'N/A'
@@ -527,4 +709,3 @@ export function TransactionManager() {
     </>
   )
 }
-

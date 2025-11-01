@@ -1,8 +1,8 @@
 // lib/web3.ts - COMPLETE UPDATED FILE
 import { ethers } from "ethers"
-import { CONTRACT_ADDRESSES } from "./constants"
 import { COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
 import { getTargetChainId, isSupportedChain, SUPPORTED_CHAINS } from "./networks"
+import { CHAIN_CONTRACT_ADDRESSES, CHAIN_POPULAR_TOKENS, ContractAddresses, Token } from "./constants" // <-- Import Token and CHAIN_POPULAR_TOKENS
 
 // 1. Updated interface to include initiator
 export interface TransactionDetails {
@@ -165,7 +165,7 @@ export class Web3Service {
       421614: {
         chainName: "Arbitrum Sepolia",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc"],
+        rpcUrls: ["https://arbitrum-sepolia.drpc.org"],
         blockExplorerUrls: ["https://sepolia.arbiscan.io"],
       },
 
@@ -176,11 +176,12 @@ export class Web3Service {
         rpcUrls: ["https://forno.celo.org"],
         blockExplorerUrls: ["https://celoscan.io"],
       },
-      44787: {
-        chainName: "Celo Alfajores",
+      
+      11142220: {
+        chainName: "Celo Sepolia",
         nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-        rpcUrls: ["https://alfajores-forno.celo-testnet.org"],
-        blockExplorerUrls: ["https://alfajores.celoscan.io"],
+        rpcUrls: ["https://sepolia-forno.celo.org"], 
+        blockExplorerUrls: ["https://celo-sepolia.celoscan.io"], 
       },
 
       // Lisk
@@ -235,10 +236,43 @@ export class Web3Service {
     return this.provider
   }
 
+  // --- NEW: Helper to get chain-specific contract addresses ---
+  private async getContractAddresses(): Promise<ContractAddresses> {
+    const networkInfo = await this.getNetworkInfo()
+    if (!networkInfo) {
+      throw new Error("Could not determine current network to get contract addresses.")
+    }
+
+    const addresses = CHAIN_CONTRACT_ADDRESSES[networkInfo.chainId]
+
+    if (!addresses) {
+      throw new Error(`Contract addresses not configured for chain ID ${networkInfo.chainId}`)
+    }
+
+    return addresses
+  }
+  // -----------------------------------------------------------
+  
+  // --- NEW: Helper to get chain-specific token list ---
+  public async getPopularTokens(): Promise<readonly Token[]> {
+    const networkInfo = await this.getNetworkInfo()
+    if (!networkInfo) return [] as const;
+
+    return CHAIN_POPULAR_TOKENS[networkInfo.chainId] || [] as const;
+  }
+  
+  // --- NEW: Helper to get chain-specific native token ---
+  public async getNativeToken(): Promise<Token | undefined> {
+    const tokens = await this.getPopularTokens();
+    return tokens.find(t => t.address === ethers.ZeroAddress);
+  }
+  // ---------------------------------------------------
+
+
   async getAllTransactions(): Promise<FullTransaction[]> {
     if (!this.signer) throw new Error("Wallet not connected")
 
-    const contract = this.getMultiSigControllerContract()
+    const contract = await this.getMultiSigControllerContract()
     const userAddress = await this.signer.getAddress()
 
     let transactionCount: bigint
@@ -288,20 +322,26 @@ export class Web3Service {
 
   async validateContracts(): Promise<{ companyWallet: boolean; multiSigController: boolean }> {
     const provider = this.getProvider()
+    const addresses = await this.getContractAddresses().catch((e) => {
+        console.error("Failed to get contract addresses for validation:", e.message)
+        return null; 
+    });
 
     const results = {
       companyWallet: false,
       multiSigController: false,
     }
 
+    if (!addresses) return results;
+
     try {
-      if (CONTRACT_ADDRESSES.COMPANY_WALLET && ethers.isAddress(CONTRACT_ADDRESSES.COMPANY_WALLET)) {
-        const code = await provider.getCode(CONTRACT_ADDRESSES.COMPANY_WALLET)
+      if (addresses.COMPANY_WALLET && ethers.isAddress(addresses.COMPANY_WALLET)) {
+        const code = await provider.getCode(addresses.COMPANY_WALLET)
         results.companyWallet = code !== "0x"
       }
 
-      if (CONTRACT_ADDRESSES.MULTISIG_CONTROLLER && ethers.isAddress(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)) {
-        const code = await provider.getCode(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER)
+      if (addresses.MULTISIG_CONTROLLER && ethers.isAddress(addresses.MULTISIG_CONTROLLER)) {
+        const code = await provider.getCode(addresses.MULTISIG_CONTROLLER)
         results.multiSigController = code !== "0x"
       }
     } catch (error) {
@@ -326,15 +366,19 @@ export class Web3Service {
     }
   }
 
-  getCompanyWalletContract() {
+  // --- UPDATED: Use getContractAddresses to instantiate contracts ---
+  async getCompanyWalletContract() {
     if (!this.signer) throw new Error("Wallet not connected")
-    return new ethers.Contract(CONTRACT_ADDRESSES.COMPANY_WALLET, COMPANY_WALLET_ABI, this.signer)
+    const addresses = await this.getContractAddresses()
+    return new ethers.Contract(addresses.COMPANY_WALLET, COMPANY_WALLET_ABI, this.signer)
   }
 
-  getMultiSigControllerContract() {
+  async getMultiSigControllerContract() {
     if (!this.signer) throw new Error("Wallet not connected")
-    return new ethers.Contract(CONTRACT_ADDRESSES.MULTISIG_CONTROLLER, MULTISIG_CONTROLLER_ABI, this.signer)
+    const addresses = await this.getContractAddresses()
+    return new ethers.Contract(addresses.MULTISIG_CONTROLLER, MULTISIG_CONTROLLER_ABI, this.signer)
   }
+  // -------------------------------------------------------------------
 
   private async getTransactionIdFromReceipt(
     contract: ethers.Contract,
@@ -361,9 +405,8 @@ export class Web3Service {
   // Company Wallet Methods
   async getBalance(): Promise<string> {
     try {
-      const contract = this.getCompanyWalletContract()
-      const balance = await contract.getBalance()
-      return ethers.formatEther(balance)
+      const contract = await this.getCompanyWalletContract()
+      return ethers.formatEther(await contract.getBalance()) // Note: getBalance returns value in native token (ETH/CELO), formatEther handles it for display
     } catch (error: any) {
       throw new Error(`Failed to get balance: ${error.message}`)
     }
@@ -375,7 +418,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getCompanyWalletContract()
+      const contract = await this.getCompanyWalletContract()
       const balance = await contract.getTokenBalance(tokenAddress)
       return ethers.formatUnits(balance, decimals)
     } catch (error: any) {
@@ -385,7 +428,7 @@ export class Web3Service {
 
   async getOwner(): Promise<string> {
     try {
-      const contract = this.getCompanyWalletContract()
+      const contract = await this.getCompanyWalletContract()
       return await contract.owner()
     } catch (error: any) {
       throw new Error(`Failed to get owner: ${error.message}`)
@@ -394,7 +437,7 @@ export class Web3Service {
 
   async getController(): Promise<string> {
     try {
-      const contract = this.getCompanyWalletContract()
+      const contract = await this.getCompanyWalletContract()
       return await contract.controller()
     } catch (error: any) {
       throw new Error(`Failed to get controller: ${error.message}`)
@@ -419,7 +462,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
 
       let valueInWei: bigint
       if (isTokenTransfer) {
@@ -441,7 +484,7 @@ export class Web3Service {
 
   async confirmTransaction(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.confirmTransaction(transactionId)
     } catch (error: any) {
       throw new Error(`Failed to confirm transaction: ${error.message}`)
@@ -450,7 +493,7 @@ export class Web3Service {
 
   async confirmTransactionsBatch(transactionIds: (number | bigint)[]): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.confirmTransactionsBatch(transactionIds)
     } catch (error: any) {
       throw new Error(`Failed to confirm transactions batch: ${error.message}`)
@@ -459,7 +502,7 @@ export class Web3Service {
 
   async revokeConfirmation(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.revokeConfirmation(transactionId)
     } catch (error: any) {
       throw new Error(`Failed to revoke confirmation: ${error.message}`)
@@ -468,7 +511,7 @@ export class Web3Service {
 
   async executeTransactionManual(transactionId: number | bigint): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.executeTransactionManual(transactionId)
     } catch (error: any) {
       throw new Error(`Failed to execute transaction: ${error.message}`)
@@ -477,7 +520,7 @@ export class Web3Service {
 
   async getTransaction(transactionId: number | bigint): Promise<TransactionDetails> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const tx = await contract.getTransaction(transactionId)
 
       return {
@@ -499,7 +542,7 @@ export class Web3Service {
 
   async getTransactionCount(): Promise<number> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const count = await contract.getTransactionCount()
       return Number(count)
     } catch (error: any) {
@@ -509,7 +552,7 @@ export class Web3Service {
 
   async isConfirmed(transactionId: number | bigint): Promise<boolean> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.isConfirmed(transactionId)
     } catch (error: any) {
       throw new Error(`Failed to check confirmation status: ${error.message}`)
@@ -522,7 +565,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.hasConfirmed(transactionId, owner)
     } catch (error: any) {
       throw new Error(`Failed to check owner confirmation: ${error.message}`)
@@ -531,7 +574,7 @@ export class Web3Service {
 
   async getOwners(): Promise<{ addresses: string[]; names: string[]; percentages: bigint[]; removables: boolean[] }> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const result = await contract.getOwners()
 
       return {
@@ -551,7 +594,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const owner = await contract.owners(address)
 
       return {
@@ -568,7 +611,7 @@ export class Web3Service {
 
   async getRequiredPercentage(): Promise<number> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const percentage = await contract.requiredPercentage()
       return Number(percentage)
     } catch (error: any) {
@@ -578,7 +621,7 @@ export class Web3Service {
 
   async getPoolPercentage(): Promise<number> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const percentage = await contract.getPoolPercentage()
       return Number(percentage)
     } catch (error: any) {
@@ -588,7 +631,7 @@ export class Web3Service {
 
   async isPaused(): Promise<boolean> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.paused()
     } catch (error: any) {
       throw new Error(`Failed to check pause status: ${error.message}`)
@@ -597,7 +640,7 @@ export class Web3Service {
 
   async getDeployer(): Promise<string> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.deployer()
     } catch (error: any) {
       throw new Error(`Failed to get deployer: ${error.message}`)
@@ -606,7 +649,7 @@ export class Web3Service {
 
   async getExpiryPeriod(): Promise<bigint> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.expiryPeriod()
     } catch (error: any) {
       throw new Error(`Failed to get expiry period: ${error.message}`)
@@ -615,7 +658,7 @@ export class Web3Service {
 
   async getOwnerCount(): Promise<bigint> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.getOwnerCount()
     } catch (error: any) {
       throw new Error(`Failed to get owner count: ${error.message}`)
@@ -624,7 +667,7 @@ export class Web3Service {
 
   async getMinOwners(): Promise<bigint> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.minOwners()
     } catch (error: any) {
       throw new Error(`Failed to get min owners: ${error.message}`)
@@ -633,7 +676,7 @@ export class Web3Service {
 
   async getTimelockPeriod(): Promise<bigint> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.timelockPeriod()
     } catch (error: any) {
       throw new Error(`Failed to get timelock period: ${error.message}`)
@@ -642,7 +685,7 @@ export class Web3Service {
 
   async getCompanyWalletAddress(): Promise<string> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.companyWallet()
     } catch (error: any) {
       throw new Error(`Failed to get company wallet address: ${error.message}`)
@@ -660,7 +703,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const tx = await contract.submitAddOwner(newOwner, name, percentage)
 
       const receipt = await tx.wait()
@@ -678,7 +721,7 @@ export class Web3Service {
     }
 
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const tx = await contract.submitRemoveOwner(ownerToRemove)
 
       const receipt = await tx.wait()
@@ -694,7 +737,7 @@ export class Web3Service {
     newPercentage: number
   ): Promise<{ tx: ethers.ContractTransactionResponse; transactionId?: bigint }> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       const tx = await contract.submitChangeRequiredPercentage(newPercentage)
 
       const receipt = await tx.wait()
@@ -708,7 +751,7 @@ export class Web3Service {
 
   async pause(): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.pause()
     } catch (error: any) {
       throw new Error(`Failed to pause contract: ${error.message}`)
@@ -717,7 +760,7 @@ export class Web3Service {
 
   async unpause(): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.unpause()
     } catch (error: any) {
       throw new Error(`Failed to unpause contract: ${error.message}`)
@@ -726,7 +769,7 @@ export class Web3Service {
 
   async callTestFunction(): Promise<ethers.ContractTransactionResponse> {
     try {
-      const contract = this.getMultiSigControllerContract()
+      const contract = await this.getMultiSigControllerContract()
       return await contract.test()
     } catch (error: any) {
       throw new Error(`Failed to call test function: ${error.message}`)

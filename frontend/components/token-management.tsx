@@ -10,15 +10,12 @@ import { useToast } from "@/hooks/use-toast"
 import { Coins, RefreshCw, Plus, Copy, ExternalLink } from "lucide-react"
 import { web3Service } from "@/lib/web3"
 import { useWeb3 } from "../hooks/use-web3" // UPDATED PATH
-import { POPULAR_TOKENS, CONTRACT_ADDRESSES } from "@/lib/constants"
+import { Token } from "@/lib/constants" // Import Token interface
 import { truncateAddress } from "@/lib/utils"
+import { ethers } from "ethers" // Import ethers for ZeroAddress
 
-interface TokenBalance {
-  address: string
-  symbol: string
-  name: string
+interface TokenBalance extends Token { // Use the Token interface and extend it
   balance: string
-  decimals: number
 }
 
 export function TokenManagement() {
@@ -27,25 +24,40 @@ export function TokenManagement() {
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([])
   const [customTokenAddress, setCustomTokenAddress] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [companyWalletAddress, setCompanyWalletAddress] = useState("") // New state for wallet address
+  const [explorerBaseUrl, setExplorerBaseUrl] = useState("") // New state for explorer base URL
 
   const fetchTokenBalances = async () => {
     if (!isConnected) return
 
     setIsLoading(true)
     try {
+      const allTokens = await web3Service.getPopularTokens() // Get tokens for current chain
+      const walletAddress = await web3Service.getCompanyWalletAddress()
+      const networkInfo = await web3Service.getNetworkInfo()
+      
+      // Determine explorer base URL (for ExternalLink button)
+      let explorerUrl = "https://etherscan.io";
+      if (networkInfo?.chainId === 84532) explorerUrl = "https://sepolia.basescan.org";
+      else if (networkInfo?.chainId === 421614) explorerUrl = "https://sepolia.arbiscan.io";
+      else if (networkInfo?.chainId === 11142220) explorerUrl = "https://celo-sepolia.celoscan.io";
+      setExplorerBaseUrl(explorerUrl);
+      
+      setCompanyWalletAddress(walletAddress)
+
       const balances: TokenBalance[] = []
-
-      const ethBalance = await web3Service.getBalance()
-      balances.push({
-        address: "0x0000000000000000000000000000000000000000",
-        symbol: "ETH",
-        name: "Ether",
-        balance: ethBalance,
-        decimals: 18,
-      })
-
-      for (const token of POPULAR_TOKENS) {
-        if (token.address !== "0x0000000000000000000000000000000000000000") {
+      
+      for (const token of allTokens) {
+        // 1. Get Native Token Balance
+        if (token.address === ethers.ZeroAddress) {
+          const nativeBalance = await web3Service.getBalance()
+          balances.push({
+            ...token,
+            balance: nativeBalance,
+          })
+        } 
+        // 2. Get ERC20 Token Balance
+        else {
           try {
             const balance = await web3Service.getTokenBalance(token.address, token.decimals)
             balances.push({
@@ -92,7 +104,9 @@ export function TokenManagement() {
     }
 
     try {
-      const balance = await web3Service.getTokenBalance(customTokenAddress, 18)
+      // For a custom token, we assume 18 decimals initially, but a robust app should fetch this from the contract
+      const ASSUMED_DECIMALS = 18 
+      const balance = await web3Service.getTokenBalance(customTokenAddress, ASSUMED_DECIMALS)
       
       const exists = tokenBalances.find(
         t => t.address.toLowerCase() === customTokenAddress.toLowerCase()
@@ -104,12 +118,12 @@ export function TokenManagement() {
           symbol: "CUSTOM",
           name: "Custom Token",
           balance,
-          decimals: 18,
+          decimals: ASSUMED_DECIMALS,
         }])
 
         toast({
           title: "Token Added",
-          description: `Custom token ${truncateAddress(customTokenAddress)} has been added`,
+          description: `Custom token ${truncateAddress(customTokenAddress)} has been added (assumed 18 decimals)`,
           className: "bg-green-600 text-white border-green-700",
         })
       } else {
@@ -141,12 +155,13 @@ export function TokenManagement() {
   }
 
   const openExplorer = (address: string) => {
-    if (address === "0x0000000000000000000000000000000000000000") return
-    window.open(`https://sepolia.basescan.org/address/${address}`, "_blank")
+    if (address === ethers.ZeroAddress || !explorerBaseUrl) return
+    window.open(`${explorerBaseUrl}/address/${address}`, "_blank")
   }
 
   const copyWalletAddress = () => {
-    navigator.clipboard.writeText(CONTRACT_ADDRESSES.COMPANY_WALLET)
+    if (!companyWalletAddress) return;
+    navigator.clipboard.writeText(companyWalletAddress)
     toast({
       title: "Wallet Address Copied",
       description: "Company wallet address has been copied to clipboard",
@@ -174,18 +189,21 @@ export function TokenManagement() {
 
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
-      {/* Wallet Address Info */}
+      {/* Wallet Address Info (Dynamic) */}
       <Card className="bg-blue-900/20 border-blue-800 w-full">
         <CardContent className="pt-4 sm:pt-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
             <div className="w-full sm:w-auto">
               <p className="text-xs sm:text-sm text-blue-300 mb-1">Company Wallet Address</p>
-              <p className="text-white font-mono text-xs sm:text-base break-all">{CONTRACT_ADDRESSES.COMPANY_WALLET}</p>
+              <p className="text-white font-mono text-xs sm:text-base break-all">
+                {companyWalletAddress || "Loading..."}
+              </p>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={copyWalletAddress}
+              disabled={!companyWalletAddress}
               className="border-blue-600 hover:bg-blue-800 text-blue-300 w-full sm:w-auto"
             >
               <Copy className="h-4 w-4 mr-2" />
@@ -198,7 +216,7 @@ export function TokenManagement() {
         </CardContent>
       </Card>
 
-      {/* Token Balances */}
+      {/* Token Balances (Dynamic) */}
       <Card className="bg-gray-900 border-gray-800 w-full max-w-4xl mx-auto">
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
@@ -241,7 +259,7 @@ export function TokenManagement() {
                             {token.symbol}
                           </Badge>
                         </div>
-                        {token.address !== "0x0000000000000000000000000000000000000000" && (
+                        {token.address !== ethers.ZeroAddress && (
                           <div className="flex items-center space-x-1 sm:space-x-2 mt-1">
                             <span className="text-xs text-gray-400 font-mono truncate max-w-[150px] sm:max-w-none">
                               {truncateAddress(token.address)}
@@ -254,14 +272,16 @@ export function TokenManagement() {
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-5 w-5 p-0 text-gray-400 hover:text-gray-300"
-                              onClick={() => openExplorer(token.address)}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
+                            {explorerBaseUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 w-5 p-0 text-gray-400 hover:text-gray-300"
+                                onClick={() => openExplorer(token.address)}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -312,7 +332,7 @@ export function TokenManagement() {
             />
             <Button
               onClick={addCustomToken}
-              disabled={!customTokenAddress}
+              disabled={!customTokenAddress || isLoading}
               className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />

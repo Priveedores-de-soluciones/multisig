@@ -6,13 +6,12 @@ import { TokenManagement } from "@/components/token-management"
 import { AdminSettings } from "@/components/admin-settings"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Wallet, Send, Coins, Settings, List } from "lucide-react"
-import { useWeb3 } from "@/hooks/use-web3" // Import our local hook - UPDATED PATH
-// import { useAppKitAccount } from "@reown/appkit/react" // REMOVED
-import { TransactionManager } from "@/components/transaction"
-import { NetworkSelector } from "@/components/network-selector" // This import is still correct
+import { useWeb3 } from "@/hooks/use-web3" 
+import { TransactionManager } from "@/components/transaction" // <-- FIXED PATH
+import { NetworkSelector } from "@/components/network-selector" 
 
 export default function MultiSigWallet() {
-  const { isConnected } = useWeb3() // Use our local hook
+  const { isConnected } = useWeb3() 
 
   return (
     <div className="min-h-screen bg-[#171717] text-white">
@@ -72,7 +71,6 @@ export default function MultiSigWallet() {
             </div>
           ) : (
             <>
-              {/* TabsList is removed from here */}
               <TabsContent value="dashboard" className="mt-6"><Dashboard /></TabsContent>
               <TabsContent value="execute" className="mt-6"><TransactionForm /></TabsContent>
               <TabsContent value="tokens" className="mt-6"><TokenManagement /></TabsContent>
@@ -81,7 +79,7 @@ export default function MultiSigWallet() {
             </>
           )}
         </main>
-      </Tabs> {/* Tabs component closes here */}
+      </Tabs> 
 
       {/* Footer */}
       <footer className="border-t border-gray-800 bg-[#171717] mt-20">

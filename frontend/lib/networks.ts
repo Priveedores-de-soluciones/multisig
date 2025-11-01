@@ -17,7 +17,7 @@ export const SUPPORTED_CHAINS: { [key: number]: string } = {
 
   // Celo
   42220: "Celo",
-  44787: "Celo Alfajores",
+  11142220: "Celo Sepolia",
 
   // Lisk
   1135: "Lisk",
@@ -28,7 +28,7 @@ export const SUPPORTED_CHAINS: { [key: number]: string } = {
 export const NETWORK_GROUPS = {
   base: { name: "Base", chains: [8453, 84532] },
   arbitrum: { name: "Arbitrum", chains: [42161, 421614] },
-  celo: { name: "Celo", chains: [42220, 44787] },
+  celo: { name: "Celo", chains: [42220, 11142220] },
   lisk: { name: "Lisk", chains: [1135, 4202] },
 }
 

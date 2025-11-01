@@ -101,6 +101,7 @@ export function AdminSettings() {
       })
     } finally {
       setIsProcessing(false)
+      fetchContractInfo() // Refresh data after successful transaction
     }
   }
 
@@ -143,6 +144,7 @@ export function AdminSettings() {
       })
     } finally {
       setIsProcessing(false)
+      fetchContractInfo() // Refresh data after successful transaction
     }
   }
 
@@ -185,6 +187,7 @@ export function AdminSettings() {
       })
     } finally {
       setIsProcessing(false)
+      fetchContractInfo() // Refresh data after successful transaction
     }
   }
 
