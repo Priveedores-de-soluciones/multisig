@@ -40,8 +40,8 @@ if (!projectId) {
 const metadata = {
   name: 'MultiSig Wallet',
   description: 'A secure multi-signature wallet interface',
-  url: typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com',
-  icons: ['https://your-domain.com/icon.png'],
+  url: typeof window !== 'undefined' ? window.location.origin : 'https://multisig.faucetdrops.io',
+  icons: ['https://multisig.faucetdrops.io/icon.png'],
 }
 
 createAppKit({
