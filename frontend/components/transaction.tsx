@@ -13,6 +13,7 @@ import {
   DialogTrigger,
   DialogClose
 } from "@/components/ui/dialog"
+// AFTER (in TransactionManager.tsx)
 import { 
   History, 
   Filter, 
@@ -27,7 +28,8 @@ import {
   CheckCircle,
   Clock,
   Bug,
-  RefreshCw
+  RefreshCw,
+  TimerOff // <--- CORRECTED ICON NAME
 } from "lucide-react"
 import { web3Service, FullTransaction } from "@/lib/web3"
 import { useWeb3 } from "@/hooks/use-web3" 
@@ -204,6 +206,9 @@ export function TransactionManager() {
   const [filter, setFilter] = useState("all")
   const [transactions, setTransactions] = useState<FullTransaction[]>([])
   const [requiredPercentage, setRequiredPercentage] = useState(0)
+  // --- UPDATED: New state for expiry period ---
+  const [expiryPeriod, setExpiryPeriod] = useState(0n)
+  
   const [ignoredTxs, setIgnoredTxs] = useState<Set<string>>(new Set())
   const [selectedTx, setSelectedTx] = useState<FullTransaction | null>(null)
   const [modalDetails, setModalDetails] = useState<TransactionModalDetails | null>(null)
@@ -271,19 +276,36 @@ export function TransactionManager() {
   }
 
   const getTransactionStatus = (tx: FullTransaction): { text: string; color: string } => {
+    const nowInSeconds = BigInt(Math.floor(Date.now() / 1000))
+    const expiryTimestamp = tx.timestamp + expiryPeriod
+    
+    // 1. Executed
     if (tx.executed) {
       return { text: "Executed", color: "bg-green-600 text-white" }
     }
+    
+    // 2. Expired (Check only if not executed)
+    if (expiryPeriod > 0n && nowInSeconds > expiryTimestamp) {
+        return { text: "Expired", color: "bg-red-700 text-white" } 
+    }
+    
+    // 3. Ready/Confirmed
     const confirmed = Number(tx.confirmationCount)
     if (confirmed >= requiredPercentage) {
       return { text: "Ready to Execute", color: "bg-blue-500 text-white" }
     }
+    
+    // 4. Ignored
     if (ignoredTxs.has(tx.id.toString())) {
       return { text: "Ignored", color: "bg-gray-700 text-white" }
     }
+    
+    // 5. Pending (Confirmed but not ready)
     if (confirmed > 0) {
       return { text: "Pending", color: "bg-yellow-500 text-black" }
     }
+    
+    // 6. Proposed (No confirmations)
     return { text: "Proposed", color: "bg-gray-600 text-white" }
   }
 
@@ -295,12 +317,16 @@ export function TransactionManager() {
     await fetchChainData(); 
     
     try {
-      const [txs, reqPercent] = await Promise.all([
+      // --- UPDATED: Fetch expiryPeriod too ---
+      const [txs, reqPercent, expirySecs] = await Promise.all([
         web3Service.getAllTransactions(),
-        web3Service.getRequiredPercentage()
+        web3Service.getRequiredPercentage(),
+        web3Service.getExpiryPeriod(),
       ])
       setTransactions(txs)
       setRequiredPercentage(reqPercent)
+      // --- SET NEW STATE ---
+      setExpiryPeriod(expirySecs) 
     } catch (error: any) {
       console.error("Error fetching transaction history:", error)
       toast({
@@ -433,12 +459,17 @@ export function TransactionManager() {
   }
 
   const filteredTransactions = transactions.filter((tx) => {
+    const status = getTransactionStatus(tx).text
+
     if (filter === "all") return true
     if (filter === "pending") {
-      return !tx.executed && !ignoredTxs.has(tx.id.toString())
+      // Exclude Executed, Ignored, and Expired from Pending filter
+      return !tx.executed && !ignoredTxs.has(tx.id.toString()) && status !== "Expired"
     }
     if (filter === "executed") return tx.executed
     if (filter === "ignored") return ignoredTxs.has(tx.id.toString())
+    // --- NEW: Filter for Expired ---
+    if (filter === "expired") return status === "Expired"
     return true
   })
 
@@ -503,6 +534,8 @@ export function TransactionManager() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="executed">Executed</SelectItem>
                   <SelectItem value="ignored">Ignored</SelectItem>
+                  {/* --- NEW: Filter for Expired --- */}
+                  <SelectItem value="expired">Expired</SelectItem> 
                 </SelectContent>
               </Select>
             </div>
@@ -519,12 +552,13 @@ export function TransactionManager() {
               {filteredTransactions.length > 0 ? (
                 filteredTransactions.map((tx) => {
                   const status = getTransactionStatus(tx)
-                  // --- NEW: Use the decoding function with dynamic data ---
                   const description = getTransactionDescription(tx, contractAddresses, popularTokens)
                   
                   const txIdStr = tx.id.toString()
                   const isIgnored = ignoredTxs.has(txIdStr)
-                  
+                  // --- NEW: Check for Expiry Status ---
+                  const isExpired = status.text === "Expired"
+
                   return (
                     <Dialog key={txIdStr} onOpenChange={(open) => {
                       if (open) handleShowDetails(tx);
@@ -538,11 +572,16 @@ export function TransactionManager() {
                             </div>
                             <span className="text-xs text-gray-400">
                               {new Date(Number(tx.timestamp) * 1000).toLocaleString()}
+                              {/* --- Display Expiry Time in Details/Hover if not executed/ignored --- */}
+                              {!tx.executed && expiryPeriod > 0n && (
+                                <span className="ml-2 text-gray-500">
+                                  (Expires: {new Date(Number(tx.timestamp + expiryPeriod) * 1000).toLocaleDateString()})
+                                </span>
+                              )}
                             </span>
                           </div>
 
                           <p className="text-white text-sm sm:text-lg font-medium mb-3 break-all">
-                            {/* --- DISPLAY THE DECODED DESCRIPTION HERE --- */}
                             {description}
                           </p>
 
@@ -559,7 +598,8 @@ export function TransactionManager() {
                               )}
                             </div>
                             
-                            {!tx.executed && (
+                            {/* --- MODIFIED: Disable actions if executed OR expired --- */}
+                            {!tx.executed && !isExpired && (
                               <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 {tx.currentUserHasConfirmed ? (
                                   <Button variant="outline" size="sm" className="text-yellow-400 border-yellow-400 hover:bg-yellow-900 hover:text-yellow-300 text-xs h-8"
@@ -596,6 +636,11 @@ export function TransactionManager() {
                                   </Button>
                                 )}
                               </div>
+                            )}
+                            {isExpired && (
+                                <p className="text-red-500 text-sm flex items-center">
+                                    <TimerOff className="h-4 w-4 mr-1"/> This transaction has expired and can no longer be acted upon.
+                                </p>
                             )}
                           </div>
                         </div>
@@ -662,6 +707,15 @@ export function TransactionManager() {
                     )}
                   </p>
                 </div>
+
+                {expiryPeriod > 0n && selectedTx && (
+                   <div>
+                    <span className="text-gray-400">Expiry Time:</span>
+                    <p className="font-mono break-all">
+                      {new Date(Number(selectedTx.timestamp + expiryPeriod) * 1000).toLocaleString()}
+                    </p>
+                   </div>
+                )}
               </div>
               
               <div>

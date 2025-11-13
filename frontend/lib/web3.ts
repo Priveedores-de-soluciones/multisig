@@ -687,6 +687,7 @@ export class Web3Service {
     }
   }
 
+  // --- EXISTING FUNCTION, USED FOR EXPIRY LOGIC ---
   async getExpiryPeriod(): Promise<bigint> {
     try {
       const contract = await this.getMultiSigControllerContract()
