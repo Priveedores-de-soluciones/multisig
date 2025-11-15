@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react" // <--- Added useMemo
+import { useState, useEffect, useMemo, useCallback } from "react" // <--- Added useCallback
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +21,10 @@ export function Dashboard() {
   
   // 💰 State for storing USD prices (Symbol -> Price in USD)
   const [pricesUsd, setPricesUsd] = useState<{ [symbol: string]: number }>({}); 
+  
+  // --- NEW STATE: For Transaction Expiry Check ---
+  const [expiryPeriod, setExpiryPeriod] = useState(0n) 
+  // ------------------------------------------------
 
   const [contractInfo, setContractInfo] = useState({
     owner: "",
@@ -52,7 +56,7 @@ export function Dashboard() {
     }).format(value);
   }
 
-  const refreshBalances = async () => {
+  const refreshBalances = useCallback(async () => {
     if (!isConnected || !web3Service.isConnected()) { 
       console.log("Skipping refresh - wallet not ready")
       return
@@ -90,10 +94,14 @@ export function Dashboard() {
       }
       setBalances(newBalances)
       
-      // 3. NEW: Fetch USD Prices
-      const tokenSymbolsToFetch = tokensToFetchPrice.map(t => t.symbol);
-      const usdPrices = await web3Service.getPricesUsdBySymbol(tokenSymbolsToFetch); 
+      // 3. NEW: Fetch USD Prices & Expiry Period
+      const [usdPrices, expirySecs] = await Promise.all([
+        web3Service.getPricesUsdBySymbol(tokensToFetchPrice.map(t => t.symbol)),
+        web3Service.getExpiryPeriod(),
+      ])
+      
       setPricesUsd(usdPrices);
+      setExpiryPeriod(expirySecs) // --- SET NEW STATE ---
 
       // 4. Get Contract Info
       const [owner, controller, ownersData, requiredPercentage] = await Promise.all([
@@ -116,14 +124,19 @@ export function Dashboard() {
         requiredPercentage,
       })
 
-      // 5. Get Pending Transactions (Logic remains unchanged, but uses updated allPopularTokens)
+      // 5. Get Pending Transactions (and filter expired ones)
       const txCount = await web3Service.getTransactionCount()
       const pending = []
+      const nowInSeconds = BigInt(Math.floor(Date.now() / 1000))
       
       const startIndex = Math.max(0, txCount - 10)
       for (let i = startIndex; i < txCount; i++) {
         const tx = await web3Service.getTransaction(i)
-        if (!tx.executed) {
+        
+        // --- NEW: Check for execution and expiry ---
+        const isExpired = expirySecs > 0n && nowInSeconds > (tx.timestamp + expirySecs)
+        
+        if (!tx.executed && !isExpired) {
           pending.push({
             id: i,
             to: tx.to,
@@ -157,7 +170,7 @@ export function Dashboard() {
     } finally {
       setIsRefreshing(false)
     }
-  }
+  }, [isConnected, toast]) // Added useCallback and dependencies
 
   useEffect(() => {
     if (isConnected) {
@@ -170,7 +183,7 @@ export function Dashboard() {
       
       return () => clearTimeout(timer)
     }
-  }, [isConnected])
+  }, [isConnected, refreshBalances]) // Added refreshBalances to dependencies
 
   // Helper for rendering balance cards (UPDATED for USD)
   const renderBalanceCard = (token: Token, balance: string) => {
@@ -214,7 +227,7 @@ export function Dashboard() {
       if (nativeToken) {
           tokens.push(nativeToken)
           
-          // Try to get tokens for the current chain
+          // Use a function to safely get network info
           const currentChainId = web3Service.getNetworkInfo()?.chainId || 0
           const popularTokens = CHAIN_POPULAR_TOKENS[currentChainId] || []
           
@@ -379,7 +392,9 @@ export function Dashboard() {
               ))
             ) : (
               <div className="text-center py-6">
-                <p className="text-gray-400 text-sm">No pending transactions</p>
+                <p className="text-gray-400 text-sm">
+                  {isRefreshing ? 'Checking for pending transactions...' : 'No pending transactions'}
+                </p>
               </div>
             )}
           </div>
