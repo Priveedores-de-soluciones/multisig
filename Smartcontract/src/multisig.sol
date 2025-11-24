@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "../lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 import "./IWallet.sol";
 
 contract MultiSigWalletController is ReentrancyGuard {
@@ -41,7 +41,7 @@ contract MultiSigWalletController is ReentrancyGuard {
     uint256 public poolPercentage;
     Transaction[] public transactions;
     bool public paused = false;
-    uint256 public timelockPeriod = 60 seconds;
+    uint256 public timelockPeriod = 12 hours;
     uint256 public expiryPeriod = 3 days;
     uint256 public minOwners = 2;
 
@@ -107,40 +107,48 @@ contract MultiSigWalletController is ReentrancyGuard {
 
     // ============ CONSTRUCTOR ============
 
-    constructor(
-        address _companyWallet,
-        address _ceo,
-        string memory _ceoName,
-        address _cto,
-        string memory _ctoName
-    ) {
-        require(_companyWallet != address(0), "Invalid company wallet");
-        require(
-            _ceo != address(0) && _cto != address(0),
-            "Invalid owner address"
-        );
-        require(
-            _ceo != _cto && _ceo != msg.sender && _cto != msg.sender,
-            "Duplicate addresses"
-        );
+  constructor(
+    address _companyWallet,
+    address _ceo,
+    string memory _ceoName,
+    address _cto,
+    string memory _ctoName,
+    address _cfo,
+    string memory _cfoName
+) {
+    require(_companyWallet != address(0), "Invalid company wallet");
+    require(
+        _ceo != address(0) && _cfo != address(0) && _cto != address(0),
+        "Invalid owner address"
+    );
+    require(
+        _ceo != _cto && _ceo != msg.sender && _cto != msg.sender && _cfo != _ceo && _cfo != _cto && _cfo != msg.sender,
+        "Duplicate addresses"
+    );
 
-        deployer = msg.sender;
-        companyWallet = ICompanyWallet(_companyWallet);
-        requiredPercentage = 60;
-        poolPercentage = 30;
+    deployer = msg.sender;
+    companyWallet = ICompanyWallet(_companyWallet);
+    requiredPercentage = 60;
+    poolPercentage = 30;
 
-        owners[_ceo] = Owner(_ceo, _ceoName, 35, true, false, 0);
-        ownerIndex[_ceo] = 0;
-        ownerAddresses.push(_ceo);
+    owners[_ceo] = Owner(_ceo, _ceoName, 20, true, false, 0);
+    ownerIndex[_ceo] = 0;
+    ownerAddresses.push(_ceo);
 
-        owners[_cto] = Owner(_cto, _ctoName, 35, true, false, 1);
-        ownerIndex[_cto] = 1;
-        ownerAddresses.push(_cto);
+    owners[_cto] = Owner(_cto, _ctoName, 20, true, false, 1);
+    ownerIndex[_cto] = 1;
+    ownerAddresses.push(_cto);
 
-        emit OwnerAdded(_ceo, _ceoName, 35);
-        emit OwnerAdded(_cto, _ctoName, 35);
-        emit RequiredPercentageChanged(60);
-    }
+    // FIXED: Changed _cto to _cfo and _ctoName to _cfoName
+    owners[_cfo] = Owner(_cfo, _cfoName, 20, true, false, 2);
+    ownerIndex[_cfo] = 2;
+    ownerAddresses.push(_cfo);
+
+    emit OwnerAdded(_ceo, _ceoName, 20);
+    emit OwnerAdded(_cto, _ctoName, 20);
+    emit OwnerAdded(_cfo, _cfoName, 20);
+    emit RequiredPercentageChanged(60);
+}
 
     // ============ OWNER MANAGEMENT (EXTERNAL) ============
     // These functions are called via proposals with encoded data

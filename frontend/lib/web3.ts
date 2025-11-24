@@ -1,8 +1,25 @@
-// lib/web3.ts - COMPLETE UPDATED FILE
 import { ethers } from "ethers"
 import { COMPANY_WALLET_ABI, MULTISIG_CONTROLLER_ABI } from "./abis"
 import { getTargetChainId, isSupportedChain, SUPPORTED_CHAINS } from "./networks"
 import { CHAIN_CONTRACT_ADDRESSES, CHAIN_POPULAR_TOKENS, ContractAddresses, Token } from "./constants" // <-- Import Token and CHAIN_POPULAR_TOKENS
+
+// CoinGecko API Configuration
+const COINGECKO_API_URL = "https://api.coingecko.com/api/v3";
+
+// Map our local token symbols to CoinGecko's internal IDs
+// This is crucial for fetching real prices. Update this as you add new tokens.
+const TOKEN_SYMBOL_TO_ID: { [symbol: string]: string } = {
+  'ETH': 'ethereum',
+  'CELO': 'celo',
+  'USDC': 'usd-coin',
+  'USDT': 'tether',
+  'cUSD': 'celo-dollar',
+  'DAI': 'dai',
+  'cEUR': 'celo-euro',
+  'LSK': 'lisk', 
+  'wETH': 'weth', 
+  'WBTC': 'wrapped-bitcoin', 
+};
 
 // 1. Updated interface to include initiator
 export interface TransactionDetails {
@@ -29,6 +46,11 @@ export interface Owner {
   exists: boolean
   isRemovable: boolean
   index: bigint
+}
+
+// Helper function to get CoinGecko ID from symbol
+function getCoinGeckoId(symbol: string): string | undefined {
+  return TOKEN_SYMBOL_TO_ID[symbol.toUpperCase()];
 }
 
 export class Web3Service {
@@ -142,61 +164,38 @@ export class Web3Service {
       }
     } = {
       // Base
-      8453: {
+      8453: { // Base Mainnet
         chainName: "Base",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
         rpcUrls: ["https://mainnet.base.org"],
         blockExplorerUrls: ["https://basescan.org"],
       },
-      84532: {
-        chainName: "Base Sepolia",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: ["https://sepolia.base.org"],
-        blockExplorerUrls: ["https://sepolia.basescan.org"],
-      },
-
       // Arbitrum
-      42161: {
+      42161: { // Arbitrum One Mainnet
         chainName: "Arbitrum One",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
         rpcUrls: ["https://arb1.arbitrum.io/rpc"],
         blockExplorerUrls: ["https://arbiscan.io"],
       },
-      421614: {
-        chainName: "Arbitrum Sepolia",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: ["https://arbitrum-sepolia.drpc.org"],
-        blockExplorerUrls: ["https://sepolia.arbiscan.io"],
-      },
+      
 
       // Celo
-      42220: {
+      42220: { // Celo Mainnet
         chainName: "Celo",
         nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
         rpcUrls: ["https://forno.celo.org"],
         blockExplorerUrls: ["https://celoscan.io"],
       },
       
-      11142220: {
-        chainName: "Celo Sepolia",
-        nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-        rpcUrls: ["https://sepolia-forno.celo.org"], 
-        blockExplorerUrls: ["https://celo-sepolia.celoscan.io"], 
-      },
 
       // Lisk
-      1135: {
+      1135: { // Lisk Mainnet
         chainName: "Lisk",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
         rpcUrls: ["https://rpc.lisk.com"],
         blockExplorerUrls: ["https://blockscout.lisk.com"],
       },
-      4202: {
-        chainName: "Lisk Sepolia",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: ["https://rpc.sepolia-lisk.com"],
-        blockExplorerUrls: ["https://sepolia-blockscout.lisk.com"],
-      },
+     
     }
 
     const config = chainConfigs[chainId]
@@ -236,7 +235,7 @@ export class Web3Service {
     return this.provider
   }
 
-  // --- NEW: Helper to get chain-specific contract addresses ---
+  // --- Helper to get chain-specific contract addresses ---
   private async getContractAddresses(): Promise<ContractAddresses> {
     const networkInfo = await this.getNetworkInfo()
     if (!networkInfo) {
@@ -253,7 +252,7 @@ export class Web3Service {
   }
   // -----------------------------------------------------------
   
-  // --- NEW: Helper to get chain-specific token list ---
+  // --- Helper to get chain-specific token list ---
   public async getPopularTokens(): Promise<readonly Token[]> {
     const networkInfo = await this.getNetworkInfo()
     if (!networkInfo) return [] as const;
@@ -261,50 +260,83 @@ export class Web3Service {
     return CHAIN_POPULAR_TOKENS[networkInfo.chainId] || [] as const;
   }
   
-  // --- NEW: Helper to get chain-specific native token ---
+  // --- Helper to get chain-specific native token ---
   public async getNativeToken(): Promise<Token | undefined> {
     const tokens = await this.getPopularTokens();
     return tokens.find(t => t.address === ethers.ZeroAddress);
   }
   
-  // --- NEW: Mock function to get USD prices for tokens ---
+  // --- Real implementation to get USD prices for tokens using CoinGecko ---
   /**
-   * Fetches the current USD price for a list of token symbols.
-   * NOTE: In a real application, this would call a reliable price oracle API (e.g., CoinGecko).
+   * Fetches the current USD price for a list of token symbols using CoinGecko.
    * @param symbols An array of token symbols (e.g., ['ETH', 'USDC'])
    * @returns A promise that resolves to an object mapping symbol to its USD price.
    */
   public async getPricesUsdBySymbol(symbols: string[]): Promise<{ [symbol: string]: number }> {
-    // This is a mock implementation. Replace with actual API call (e.g., fetch from CoinGecko)
-    const mockPrices: { [symbol: string]: number } = {
-      // Common native tokens and stablecoins
-      'ETH': 3500.00,  // Mock price for Ether-based chains (Base, Arbitrum, Lisk)
-      'CELO': 0.75,     // Mock price for Celo
-      'USDC': 1.00,    // Mock price for USDC
-      'USDT': 1.00,    // Mock price for USDT
-      'cUSD': 1.00,    // Mock price for cUSD
-      'wETH': 3500.00, // Mock price for Wrapped Ether
-      'WBTC': 70000.00, // Mock price for Wrapped Bitcoin
-    };
-
-    const prices: { [symbol: string]: number } = {};
+    const coinIds: string[] = [];
+    const symbolMap: { [coinId: string]: string } = {};
+    const stablecoinPrices: { [symbol: string]: number } = {};
+    
+    // 1. Map symbols to CoinGecko IDs and build the fetch list
     for (const symbol of symbols) {
-      const price = mockPrices[symbol.toUpperCase()];
-      // Use 1.0 for stablecoins if not explicitly mocked, otherwise use the mock price, or 0.0 if unknown.
-      if (price !== undefined) {
-          prices[symbol] = price;
-      } else if (symbol.toUpperCase().includes('USD')) { // Simple check for USD stablecoins
-          prices[symbol] = 1.00;
-      } else {
-          // In a real app, you would log an error or fetch from a secondary source
-          prices[symbol] = 0.0;
+      const id = getCoinGeckoId(symbol);
+      if (id) {
+        coinIds.push(id);
+        symbolMap[id] = symbol; // Map ID back to original symbol
+      } else if (symbol.toUpperCase().includes('USD') || symbol.toUpperCase().includes('EUR')) {
+        // Handle unknown stablecoins/pegged assets with a $1.00 fallback immediately
+        stablecoinPrices[symbol] = 1.00;
       }
     }
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return prices;
+
+    if (coinIds.length === 0) {
+      // If only stablecoins were requested, return the fallback prices immediately
+      return stablecoinPrices;
+    }
+
+    const idsString = coinIds.join(',');
+    const url = `${COINGECKO_API_URL}/simple/price?ids=${idsString}&vs_currencies=usd`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`CoinGecko API request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const prices: { [symbol: string]: number } = { ...stablecoinPrices };
+
+      // 2. Process CoinGecko response and map prices back to symbols
+      for (const [coinId, priceData] of Object.entries(data) as [string, any][]) {
+        const symbol = symbolMap[coinId];
+        if (symbol && priceData && priceData.usd !== undefined) {
+          prices[symbol] = priceData.usd;
+        }
+      }
+      
+      // 3. Ensure all originally requested symbols are present (using 0.0 for failed lookups)
+      for (const symbol of symbols) {
+          if (prices[symbol] === undefined) {
+              prices[symbol] = 0.0;
+          }
+      }
+
+      return prices;
+      
+    } catch (error) {
+      console.error("Error fetching prices from CoinGecko:", error);
+      // In case of API failure, return a safe fallback for all requested symbols
+      const fallbackPrices: { [symbol: string]: number } = {};
+      for (const symbol of symbols) {
+        // Use 1.00 for USD/EUR stablecoins, 0.0 otherwise on failure
+        if (symbol.toUpperCase().includes('USD') || symbol.toUpperCase().includes('EUR')) {
+          fallbackPrices[symbol] = 1.00;
+        } else {
+          fallbackPrices[symbol] = 0.0;
+        }
+      }
+      return fallbackPrices;
+    }
   }
   // ---------------------------------------------------
 

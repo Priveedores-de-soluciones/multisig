@@ -2,34 +2,34 @@
 
 // --- CONFIGURATION ---
 // SET YOUR DEFAULT TARGET NETWORK HERE
-const TARGET_CHAIN_ID = 84532 // Base Sepolia
-const TARGET_CHAIN_NAME = "Base Sepolia"
+const TARGET_CHAIN_ID = 8453 // Base Sepolia
+const TARGET_CHAIN_NAME = "Base"
 
 // Add all networks your app supports
 export const SUPPORTED_CHAINS: { [key: number]: string } = {
   // Base
   8453: "Base",
-  84532: "Base Sepolia",
+  
 
   // Arbitrum
   42161: "Arbitrum One",
-  421614: "Arbitrum Sepolia",
+  
 
   // Celo
   42220: "Celo",
-  11142220: "Celo Sepolia",
+  
 
   // Lisk
   1135: "Lisk",
-  4202: "Lisk Sepolia",
+  
 }
 
 // Group networks by protocol for UI display (optional)
 export const NETWORK_GROUPS = {
-  base: { name: "Base", chains: [8453, 84532] },
-  arbitrum: { name: "Arbitrum", chains: [42161, 421614] },
-  celo: { name: "Celo", chains: [42220, 11142220] },
-  lisk: { name: "Lisk", chains: [1135, 4202] },
+  base: { name: "Base", chains: [8453] },
+  arbitrum: { name: "Arbitrum", chains: [42161] },
+  celo: { name: "Celo", chains: [42220] },
+  lisk: { name: "Lisk", chains: [1135] },
 }
 
 /**

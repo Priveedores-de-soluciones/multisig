@@ -1,4 +1,3 @@
-// lib/constants.ts - COMPLETE UPDATED FILE
 import { ethers } from "ethers";
 
 // --- Contract Address Configuration ---
@@ -11,25 +10,25 @@ export interface ContractAddresses {
 
 // 2. Map of Chain ID to Contract Addresses (Using your deterministic addresses)
 export const CHAIN_CONTRACT_ADDRESSES: { [chainId: number]: ContractAddresses } = {
-  // Celo Sepolia
-  11142220: {
-    COMPANY_WALLET: "0x4Be7A1AaeAb3e5ef6614965A6b691FC6f2899372",
-    MULTISIG_CONTROLLER: "0xDDAa50DE37178C6AFc7c98a7923FE93518BE223f",
+  // Celo Mainnet
+  42220: {
+    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
+    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
   },
-  // Lisk Sepolia (Chain ID 4202)
-  4202: {
-    COMPANY_WALLET: "0x4Be7A1AaeAb3e5ef6614965A6b691FC6f2899372",
-    MULTISIG_CONTROLLER: "0xDDAa50DE37178C6AFc7c98a7923FE93518BE223f",
+  // Lisk Mainnet (Chain ID 1135)
+  1135: {
+    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
+    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
   },
-  // Base Sepolia (Chain ID 84532)
-  84532: {
-    COMPANY_WALLET: "0x4Be7A1AaeAb3e5ef6614965A6b691FC6f2899372",
-    MULTISIG_CONTROLLER: "0xDDAa50DE37178C6AFc7c98a7923FE93518BE223f",
+  // Base Mainnet (Chain ID 8453)
+  8453: {
+    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
+    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
   },
-  // Arbitrum Sepolia (Chain ID 421614)
-  421614: {
-    COMPANY_WALLET: "0x4Be7A1AaeAb3e5ef6614965A6b691FC6f2899372",
-    MULTISIG_CONTROLLER: "0xDDAa50DE37178C6AFc7c98a7923FE93518BE223f",
+  // Arbitrum One (Chain ID 42161)
+  42161: {
+    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
+    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
   },
 } as const;
 
@@ -46,8 +45,8 @@ export interface Token {
 
 // 4. Map of Chain ID to an array of popular tokens on that chain
 export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
-  // Base Sepolia (Chain ID 84532)
-  84532: [
+  // Base Mainnet (Chain ID 8453)
+  8453: [
     {
       name: "Ether",
       address: ethers.ZeroAddress, // Native token
@@ -56,20 +55,20 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
     },
     {
       name: "USD Coin",
-      address: "0xd7e9C75C6C05FdE929cAc19bb887892de78819B7", // Example Base Sepolia USDC
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Mainnet USDC
       symbol: "USDC",
       decimals: 6,
     },
     {
-      name: "USD Tether",
-      address: "0xd7e9C75C6C05FdE929cAc19bb887892de78819B7", // Example Base Sepolia USDC
-      symbol: "USDC",
+      name: "Tether USD",
+      address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base Mainnet DAI
+      symbol: "USDT",
       decimals: 6,
     },
   ],
 
-  // Arbitrum Sepolia (Chain ID 421614)
-  421614: [
+  // Arbitrum One (Chain ID 42161)
+  42161: [
     {
       name: "Ether",
       address: ethers.ZeroAddress, // Native token
@@ -77,61 +76,68 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
       decimals: 18,
     },
     {
-      name: "USD Coin ",
-      address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", // Example Arbitrum Sepolia USDC
+      name: "USD Coin",
+      address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // Arbitrum One USDC
       symbol: "USDC",
       decimals: 6,
     }, 
     {
-      name: "USD Tether ",
-      address: "0xf3118a17863996B9F2A073c9A66Faaa664355cf8", // Example Arbitrum Sepolia USDC
+      name: "Tether USD",
+      address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", // Arbitrum One USDT
       symbol: "USDT",
       decimals: 6,
     }, 
   ],
 
-  // Celo Sepolia (Chain ID 11142220) - **Celo is the native token**
-  11142220: [
+  // Celo Mainnet (Chain ID 42220) - **Celo is the native token**
+  42220: [
     {
       name: "Celo",
       address: ethers.ZeroAddress, // Native token
       symbol: "CELO",
       decimals: 18,
     },
-    // Placeholder for a stablecoin on Celo Sepolia
+    // Stablecoin on Celo Mainnet
     {
-      name: "Celo Dollar ",
-      address: "0xdE9e4C3ce781b4bA68120d6261cbad65ce0aB00b", // Placeholder address
+      name: "Celo Dollar",
+      address: "0x765de816845861e75a25fca122bb6898b8b1282a", // Celo Mainnet cUSD
       symbol: "cUSD",
       decimals: 18,
     },
      {
-      name: "Tether USD ",
-      address: "0xf74B14ecbAdC9fBb283Fb3c8ae11E186856eae6f", // Placeholder address
+      name: "Tether USD",
+      address: "0x48065fbbe25f71c9282ddf5e1cd6d6a887483d5e", // Celo Mainnet cEUR
       symbol: "USDT",
-      decimals: 18,
+      decimals: 6,
     },
   ],
 
-  // Lisk Sepolia (Chain ID 4202)
-  4202: [
+  // Lisk Mainnet (Chain ID 1135)
+  1135: [
     {
       name: "Ether",
       address: ethers.ZeroAddress, // Native token
       symbol: "ETH",
       decimals: 18,
     },
+    // Placeholder for a main token on Lisk
     {
       name: "Lisk",
-      address: "0x8a21CF9Ba08Ae709D64Cb25AfAA951183EC9FF6D", // Placeholder address
+      address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24", // Placeholder address
       symbol: "LSK",
       decimals: 18,
     },
-     {
-      name: "Tether USD ",
-      address: "0x2728DD8B45B788e26d12B13Db5A244e5403e7eda", // Placeholder address
+    {
+      name: "Tether USD",
+      address: "0x05D032ac25d322df992303dCa074EE7392C117b9", // Placeholder address
       symbol: "USDT",
-      decimals: 18,
+      decimals: 6,
+    },
+     {
+      name: "USD Coin",
+      address: "0xF242275d3a6527d877f2c927a82D9b057609cc71", // Placeholder address
+      symbol: "USDC",
+      decimals: 6,
     },
   ],
 } as const;
@@ -139,12 +145,12 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
 
 // Export a default/fallback state (e.g., UI initialization). 
 // Components MUST now use web3Service.getPopularTokens() instead.
-export const POPULAR_TOKENS = CHAIN_POPULAR_TOKENS[84532]; 
+export const POPULAR_TOKENS = CHAIN_POPULAR_TOKENS[8453]; // **Default to Base Mainnet**
 
 // Export a fallback for components that expect the old structure
 export const CONTRACT_ADDRESSES = {
-  COMPANY_WALLET: CHAIN_CONTRACT_ADDRESSES[84532].COMPANY_WALLET, 
-  MULTISIG_CONTROLLER: CHAIN_CONTRACT_ADDRESSES[84532].MULTISIG_CONTROLLER,
+  COMPANY_WALLET: CHAIN_CONTRACT_ADDRESSES[8453].COMPANY_WALLET, // **Default to Base Mainnet**
+  MULTISIG_CONTROLLER: CHAIN_CONTRACT_ADDRESSES[8453].MULTISIG_CONTROLLER, // **Default to Base Mainnet**
 } as const;
 
 
@@ -152,10 +158,10 @@ export const CONTRACT_ADDRESSES = {
 
 // Network configurations (These are mainly for reference; lib/networks.ts is the source of truth)
 export const NETWORKS = {
-  BASE_SEPOLIA: {
-    chainId: 84532,
-    name: "Base Sepolia",
-    rpcUrl: "https://sepolia.base.org",
+  BASE: {
+    chainId: 8453,
+    name: "Base",
+    rpcUrl: "https://mainnet.base.org",
   },
 } as const;
 
@@ -174,19 +180,3 @@ export const DEFAULT_CONFIG = {
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000, // milliseconds
 } as const;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
