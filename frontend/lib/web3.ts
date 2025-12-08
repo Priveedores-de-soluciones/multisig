@@ -18,7 +18,9 @@ const TOKEN_SYMBOL_TO_ID: { [symbol: string]: string } = {
   'cEUR': 'celo-euro',
   'LSK': 'lisk', 
   'wETH': 'weth', 
-  'WBTC': 'wrapped-bitcoin', 
+  'WBTC': 'wrapped-bitcoin',
+  'OP': 'optimism',
+  
 };
 
 // 1. Updated interface to include initiator
@@ -194,6 +196,14 @@ export class Web3Service {
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
         rpcUrls: ["https://rpc.lisk.com"],
         blockExplorerUrls: ["https://blockscout.lisk.com"],
+      },
+
+      // Optimism
+      10: { // Optimism Mainnet
+        chainName: "Optimism",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: ["https://mainnet.optimism.io"],
+        blockExplorerUrls: ["https://optimistic.etherscan.io"],
       },
      
     }

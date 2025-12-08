@@ -12,23 +12,28 @@ export interface ContractAddresses {
 export const CHAIN_CONTRACT_ADDRESSES: { [chainId: number]: ContractAddresses } = {
   // Celo Mainnet
   42220: {
-    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
-    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
+    COMPANY_WALLET: "0xbf2bC2c21C1A3290542e5fd0eaee6E56f5ff4230",
+    MULTISIG_CONTROLLER: "0x91EaAcBa3c58EA499e229e703cbA3e6eBb52607E",
   },
   // Lisk Mainnet (Chain ID 1135)
   1135: {
-    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
-    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
+    COMPANY_WALLET: "0xbf2bC2c21C1A3290542e5fd0eaee6E56f5ff4230",
+    MULTISIG_CONTROLLER: "0x91EaAcBa3c58EA499e229e703cbA3e6eBb52607E",
   },
   // Base Mainnet (Chain ID 8453)
   8453: {
-    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
-    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
+    COMPANY_WALLET: "0xbf2bC2c21C1A3290542e5fd0eaee6E56f5ff4230",
+    MULTISIG_CONTROLLER: "0x91EaAcBa3c58EA499e229e703cbA3e6eBb52607E",
   },
   // Arbitrum One (Chain ID 42161)
   42161: {
-    COMPANY_WALLET: "0xe2FfA737dD82d0688CD1F563f6c53F0AE3E387F9",
-    MULTISIG_CONTROLLER: "0xfBcD0dACa184481cFB59bf6EbF644465b788BD9C",
+    COMPANY_WALLET: "0xbf2bC2c21C1A3290542e5fd0eaee6E56f5ff4230",
+    MULTISIG_CONTROLLER: "0x91EaAcBa3c58EA499e229e703cbA3e6eBb52607E",
+  },
+  // Optimism Mainnet (Chain ID 10)
+  10: {
+    COMPANY_WALLET: "0xbf2bC2c21C1A3290542e5fd0eaee6E56f5ff4230",
+    MULTISIG_CONTROLLER: "0x91EaAcBa3c58EA499e229e703cbA3e6eBb52607E",
   },
 } as const;
 
@@ -139,6 +144,35 @@ export const CHAIN_POPULAR_TOKENS: { [chainId: number]: readonly Token[] } = {
       symbol: "USDC",
       decimals: 6,
     },
+  ],
+
+  // Optimism Mainnet (Chain ID 10)
+  10: [
+    {
+      name: "Optimism",
+      address: "0x4200000000000000000000000000000000000042", // Native token
+      symbol: "OP",
+      decimals: 18,
+    },
+
+    {
+      name: "Ether",
+      address: ethers.ZeroAddress, // Native token
+      symbol: "ETH",
+      decimals: 18,
+    },
+    {
+      name: "USD Coin",
+      address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", // Optimism Mainnet USDC
+      symbol: "USDC",
+      decimals: 6,
+    }, 
+    {
+      name: "Tether USD",
+      address: "0x01bFF41798a0BcF287b996046Ca68b395DbC1071", // Optimism Mainnet USDT
+      symbol: "USDT",
+      decimals: 6,
+    }, 
   ],
 } as const;
 

@@ -21,6 +21,9 @@ export const SUPPORTED_CHAINS: { [key: number]: string } = {
 
   // Lisk
   1135: "Lisk",
+
+  // Optimism
+  10: "Optimism",
   
 }
 
