@@ -13,7 +13,6 @@ import {
   DialogTrigger,
   DialogClose
 } from "@/components/ui/dialog"
-// AFTER (in TransactionManager.tsx)
 import { 
   History, 
   Filter, 
@@ -29,26 +28,24 @@ import {
   Clock,
   Bug,
   RefreshCw,
-  TimerOff // <--- CORRECTED ICON NAME
+  TimerOff,
+  Timer
 } from "lucide-react"
 import { web3Service, FullTransaction } from "@/lib/web3"
 import { useWeb3 } from "@/hooks/use-web3" 
 import { ethers } from "ethers"
 import { truncateAddress } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
-// --- IMPORT BOTH ABIs ---
 import { MULTISIG_CONTROLLER_ABI, COMPANY_WALLET_ABI } from "@/lib/abis" 
-import { Token } from "@/lib/constants" // Import Token interface
+import { Token } from "@/lib/constants"
 
 
-// NEW interface
 interface OwnerDetails {
   address: string
   name: string
   percentage: bigint
 }
 
-// UPDATED interface
 interface TransactionModalDetails {
   confirmedBy: OwnerDetails[]
   pendingBy: OwnerDetails[]
@@ -56,10 +53,75 @@ interface TransactionModalDetails {
 }
 
 // ---------------------------------------------
-// --- TRANSACTION DECODING LOGIC (EXTERNAL) ---
+// --- COUNTDOWN COMPONENT ---
 // ---------------------------------------------
+function CountdownTimer({ 
+  expiryTimestamp, 
+  onExpired 
+}: { 
+  expiryTimestamp: bigint
+  onExpired?: () => void 
+}) {
+  const [timeLeft, setTimeLeft] = useState<string>("")
+  const [urgencyColor, setUrgencyColor] = useState<string>("text-green-400")
 
-// 1. Setup Interfaces for Decoding (moved outside to prevent re-creation on render)
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = BigInt(Math.floor(Date.now() / 1000))
+      const remaining = Number(expiryTimestamp - now)
+
+      if (remaining <= 0) {
+        setTimeLeft("Expired")
+        setUrgencyColor("text-red-500")
+        if (onExpired) onExpired()
+        return
+      }
+
+      // Calculate time units
+      const days = Math.floor(remaining / 86400)
+      const hours = Math.floor((remaining % 86400) / 3600)
+      const minutes = Math.floor((remaining % 3600) / 60)
+      const seconds = remaining % 60
+
+      // Format display
+      let display = ""
+      if (days > 0) display += `${days}d `
+      if (hours > 0 || days > 0) display += `${hours}h `
+      if (minutes > 0 || hours > 0 || days > 0) display += `${minutes}m `
+      display += `${seconds}s`
+
+      setTimeLeft(display.trim())
+
+      // Set urgency color based on remaining time
+      const totalSeconds = remaining
+      if (totalSeconds > 86400) { // > 1 day
+        setUrgencyColor("text-green-400")
+      } else if (totalSeconds > 3600) { // > 1 hour
+        setUrgencyColor("text-yellow-400")
+      } else if (totalSeconds > 600) { // > 10 minutes
+        setUrgencyColor("text-orange-400")
+      } else {
+        setUrgencyColor("text-red-500 animate-pulse")
+      }
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+
+    return () => clearInterval(interval)
+  }, [expiryTimestamp, onExpired])
+
+  return (
+    <div className={`flex items-center gap-1 text-xs font-mono ${urgencyColor}`}>
+      <Timer className="h-3 w-3" />
+      <span>{timeLeft}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------
+// --- TRANSACTION DECODING LOGIC ---
+// ---------------------------------------------
 const CONTROLLER_INTERFACE = new ethers.Interface(MULTISIG_CONTROLLER_ABI)
 const WALLET_INTERFACE = new ethers.Interface(COMPANY_WALLET_ABI)
 const ERC20_ABI = [
@@ -68,10 +130,6 @@ const ERC20_ABI = [
 ]
 const ERC20_INTERFACE = new ethers.Interface(ERC20_ABI)
 
-/**
- * Helper to determine the display value for ETH or Token.
- * It now takes the dynamically fetched token list.
- */
 const getTransactionValue = (tx: FullTransaction, allTokens: readonly Token[]): string => {
   if (tx.isTokenTransfer) {
     const token = allTokens.find(t => t.address.toLowerCase() === tx.tokenAddress.toLowerCase())
@@ -84,11 +142,6 @@ const getTransactionValue = (tx: FullTransaction, allTokens: readonly Token[]): 
   return `${ethers.formatEther(tx.value)} ${nativeSymbol}`
 }
 
-
-/**
- * Decodes a FullTransaction's data and value to return a human-readable description.
- * This function now accepts contract addresses and tokens dynamically.
- */
 const getTransactionDescription = (
   tx: FullTransaction, 
   contractAddresses: { controller: string, wallet: string },
@@ -98,7 +151,6 @@ const getTransactionDescription = (
   const controllerAddress = contractAddresses.controller.toLowerCase()
   const walletAddress = contractAddresses.wallet.toLowerCase()
 
-  // 1. MultiSig Controller Configuration Calls (Admin Proposals)
   if (toAddress === controllerAddress) {
     try {
       const decoded = CONTROLLER_INTERFACE.parseTransaction({ data: tx.data })
@@ -121,12 +173,9 @@ const getTransactionDescription = (
             return `Controller Action: ${decoded.name}`
         }
       }
-    } catch (e) {
-      // Fallback below
-    }
+    } catch (e) {}
   }
 
-  // 2. Company Wallet Calls (Internal Execution Logic)
   if (toAddress === walletAddress) {
     try {
       const decoded = WALLET_INTERFACE.parseTransaction({ data: tx.data })
@@ -156,12 +205,9 @@ const getTransactionDescription = (
             return `Wallet Action: ${decoded.name}`
         }
       }
-    } catch (e) {
-      // Fallback below
-    }
+    } catch (e) {}
   }
 
-  // 3. Token Transfer (Standard ERC20 interaction)
   if (tx.isTokenTransfer) {
     const value = getTransactionValue(tx, allTokens) 
     try {
@@ -172,33 +218,27 @@ const getTransactionDescription = (
         if (decoded?.name === 'approve') {
              return `🔑 ERC20 Approve on ${truncateAddress(tx.to)}`
         }
-    } catch (e) {
-        // Not a standard ERC20 function
-    }
+    } catch (e) {}
     return `🔗 Token Interaction: ${value} to ${truncateAddress(tx.to)}`
   }
   
-  // 4. Simple Native Token Transfer
   if (tx.data === "0x" && tx.value > 0n) {
     const nativeToken = allTokens.find(t => t.address === ethers.ZeroAddress)
     const value = ethers.formatEther(tx.value)
     return `💸 Send ${value} ${nativeToken?.symbol || 'ETH'} to ${truncateAddress(tx.to)}`
   }
 
-  // 5. Arbitrary Contract Interaction (Unknown ABI, default to signature)
   if (tx.data !== "0x") {
     const functionSig = tx.data.substring(0, 10)
     return `📜 Contract Interaction (${functionSig}...) to ${truncateAddress(tx.to)}`
   }
 
-  // 6. Final Fallback (0 value, no data)
   return `❓ Unknown Transaction to ${truncateAddress(tx.to)}`
 }
 
 // ---------------------------------------------
 // --- COMPONENT START ---
 // ---------------------------------------------
-
 export function TransactionManager() {
   const { isConnected } = useWeb3()
   const { toast } = useToast()
@@ -206,8 +246,8 @@ export function TransactionManager() {
   const [filter, setFilter] = useState("all")
   const [transactions, setTransactions] = useState<FullTransaction[]>([])
   const [requiredPercentage, setRequiredPercentage] = useState(0)
-  // --- UPDATED: New state for expiry period ---
   const [expiryPeriod, setExpiryPeriod] = useState(0n)
+  const [timelockPeriod, setTimelockPeriod] = useState(0n)
   
   const [ignoredTxs, setIgnoredTxs] = useState<Set<string>>(new Set())
   const [selectedTx, setSelectedTx] = useState<FullTransaction | null>(null)
@@ -217,7 +257,6 @@ export function TransactionManager() {
   const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({})
   const [isTesting, setIsTesting] = useState(false)
   
-  // New states for dynamic contract/token data
   const [contractAddresses, setContractAddresses] = useState({ controller: "", wallet: "" })
   const [popularTokens, setPopularTokens] = useState<readonly Token[]>([])
   const [explorerBaseUrl, setExplorerBaseUrl] = useState("")
@@ -243,7 +282,6 @@ export function TransactionManager() {
       setContractAddresses({ controller: controllerAddr, wallet: walletAddr })
       setPopularTokens(allTokens)
       
-      // Determine explorer base URL dynamically
       let explorerUrl = "https://etherscan.io";
       if (networkInfo?.chainId === 84532) explorerUrl = "https://sepolia.basescan.org";
       else if (networkInfo?.chainId === 421614) explorerUrl = "https://sepolia.arbiscan.io";
@@ -252,7 +290,6 @@ export function TransactionManager() {
       
     } catch (error) {
       console.error("Error fetching chain data for decoding:", error)
-      // Fallback addresses for a less disruptive UI
       setContractAddresses({ controller: "0x0", wallet: "0x0" }) 
       setPopularTokens([])
     }
@@ -279,33 +316,27 @@ export function TransactionManager() {
     const nowInSeconds = BigInt(Math.floor(Date.now() / 1000))
     const expiryTimestamp = tx.timestamp + expiryPeriod
     
-    // 1. Executed
     if (tx.executed) {
       return { text: "Executed", color: "bg-green-600 text-white" }
     }
     
-    // 2. Expired (Check only if not executed)
     if (expiryPeriod > 0n && nowInSeconds > expiryTimestamp) {
         return { text: "Expired", color: "bg-red-700 text-white" } 
     }
     
-    // 3. Ready/Confirmed
     const confirmed = Number(tx.confirmationCount)
     if (confirmed >= requiredPercentage) {
       return { text: "Ready to Execute", color: "bg-blue-500 text-white" }
     }
     
-    // 4. Ignored
     if (ignoredTxs.has(tx.id.toString())) {
       return { text: "Ignored", color: "bg-gray-700 text-white" }
     }
     
-    // 5. Pending (Confirmed but not ready)
     if (confirmed > 0) {
       return { text: "Pending", color: "bg-yellow-500 text-black" }
     }
     
-    // 6. Proposed (No confirmations)
     return { text: "Proposed", color: "bg-gray-600 text-white" }
   }
 
@@ -313,20 +344,19 @@ export function TransactionManager() {
     if (!isConnected) return
     setIsLoading(true)
     
-    // Ensure chain data is fetched before transactions
     await fetchChainData(); 
     
     try {
-      // --- UPDATED: Fetch expiryPeriod too ---
-      const [txs, reqPercent, expirySecs] = await Promise.all([
+      const [txs, reqPercent, expirySecs, timelockSecs] = await Promise.all([
         web3Service.getAllTransactions(),
         web3Service.getRequiredPercentage(),
         web3Service.getExpiryPeriod(),
+        web3Service.getTimelockPeriod(),
       ])
       setTransactions(txs)
       setRequiredPercentage(reqPercent)
-      // --- SET NEW STATE ---
-      setExpiryPeriod(expirySecs) 
+      setExpiryPeriod(expirySecs)
+      setTimelockPeriod(timelockSecs) 
     } catch (error: any) {
       console.error("Error fetching transaction history:", error)
       toast({
@@ -351,21 +381,17 @@ export function TransactionManager() {
     setModalDetails(null)
 
     try {
-      // 1. Fetch all owner data, including names
       const { addresses, names, percentages } = await web3Service.getOwners()
       
-      // 2. Create a lookup map for all owners
       const ownerMap = new Map<string, { name: string, percentage: bigint }>()
       for (let i = 0; i < addresses.length; i++) {
         ownerMap.set(addresses[i].toLowerCase(), { name: names[i], percentage: percentages[i] })
       }
 
-      // 3. Find initiator's name
       const initiatorAddress = tx.initiator.toLowerCase()
       const initiatorInfo = ownerMap.get(initiatorAddress)
       const initiatorName = initiatorInfo ? initiatorInfo.name : truncateAddress(tx.initiator)
 
-      // 4. Build confirmed/pending lists
       const confirmedBy: OwnerDetails[] = []
       const pendingBy: OwnerDetails[] = []
 
@@ -388,7 +414,6 @@ export function TransactionManager() {
         }
       }
 
-      // 5. Set the new modal details
       setModalDetails({
         confirmedBy,
         pendingBy,
@@ -463,17 +488,14 @@ export function TransactionManager() {
 
     if (filter === "all") return true
     if (filter === "pending") {
-      // Exclude Executed, Ignored, and Expired from Pending filter
       return !tx.executed && !ignoredTxs.has(tx.id.toString()) && status !== "Expired"
     }
     if (filter === "executed") return tx.executed
     if (filter === "ignored") return ignoredTxs.has(tx.id.toString())
-    // --- NEW: Filter for Expired ---
     if (filter === "expired") return status === "Expired"
     return true
   })
 
-  // Check if we have the necessary data for decoding/display
   const isDataReady = contractAddresses.controller && contractAddresses.wallet && popularTokens.length > 0;
   
   if (!isConnected) {
@@ -489,11 +511,11 @@ export function TransactionManager() {
   return (
     <>
       <Card className="bg-gray-900 border-gray-800">
-        <CardHeader className="pb-3 sm:pb-6">
+        <CardHeader className="pb-3 sm:pb-6 px-4 sm:px-6">
           <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-white flex items-center space-x-2 text-lg sm:text-xl">
-                <List className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
+              <CardTitle className="text-white flex items-center space-x-2 text-base sm:text-lg md:text-xl">
+                <List className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 flex-shrink-0" />
                 <span>Transaction Manager</span>
               </CardTitle>
               <CardDescription className="text-gray-400 text-xs sm:text-sm mt-1">
@@ -526,7 +548,7 @@ export function TransactionManager() {
             
               <Filter className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 hidden sm:block" />
               <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-32 sm:w-48 bg-gray-800 border-gray-700 text-white text-xs sm:text-sm h-8 sm:h-9">
+                <SelectTrigger className="w-28 sm:w-48 bg-gray-800 border-gray-700 text-white text-xs sm:text-sm h-8 sm:h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-800 border-gray-700">
@@ -534,14 +556,13 @@ export function TransactionManager() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="executed">Executed</SelectItem>
                   <SelectItem value="ignored">Ignored</SelectItem>
-                  {/* --- NEW: Filter for Expired --- */}
                   <SelectItem value="expired">Expired</SelectItem> 
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6">
           {isLoading || !isDataReady ? (
             <div className="text-center py-12">
               <Loader2 className="h-8 w-8 text-blue-500 mx-auto mb-4 animate-spin" />
@@ -556,8 +577,8 @@ export function TransactionManager() {
                   
                   const txIdStr = tx.id.toString()
                   const isIgnored = ignoredTxs.has(txIdStr)
-                  // --- NEW: Check for Expiry Status ---
                   const isExpired = status.text === "Expired"
+                  const expiryTimestamp = tx.timestamp + expiryPeriod
 
                   return (
                     <Dialog key={txIdStr} onOpenChange={(open) => {
@@ -569,19 +590,24 @@ export function TransactionManager() {
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge className={`${status.color} text-xs`}>{status.text}</Badge>
                               <span className="text-white font-mono text-xs sm:text-sm">ID: {txIdStr}</span>
+                              
+                              {/* Countdown Timer - Show for pending/proposed transactions only */}
+                              {!tx.executed && !isExpired && expiryPeriod > 0n && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-400">Expires:</span>
+                                  <CountdownTimer 
+                                    expiryTimestamp={expiryTimestamp}
+                                    onExpired={() => fetchTransactionHistory()}
+                                  />
+                                </div>
+                              )}
                             </div>
                             <span className="text-xs text-gray-400">
-                              {new Date(Number(tx.timestamp) * 1000).toLocaleString()}
-                              {/* --- Display Expiry Time in Details/Hover if not executed/ignored --- */}
-                              {!tx.executed && expiryPeriod > 0n && (
-                                <span className="ml-2 text-gray-500">
-                                  (Expires: {new Date(Number(tx.timestamp + expiryPeriod) * 1000).toLocaleDateString()})
-                                </span>
-                              )}
+                              Submitted: {new Date(Number(tx.timestamp) * 1000).toLocaleString()}
                             </span>
                           </div>
 
-                          <p className="text-white text-sm sm:text-lg font-medium mb-3 break-all">
+                          <p className="text-white text-sm sm:text-base font-medium mb-3 break-all">
                             {description}
                           </p>
 
@@ -598,7 +624,6 @@ export function TransactionManager() {
                               )}
                             </div>
                             
-                            {/* --- MODIFIED: Disable actions if executed OR expired --- */}
                             {!tx.executed && !isExpired && (
                               <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 {tx.currentUserHasConfirmed ? (
@@ -629,17 +654,40 @@ export function TransactionManager() {
                                 )}
                                 
                                 {Number(tx.confirmationCount) >= requiredPercentage && (
-                                  <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8"
-                                    disabled={actionLoading[`execute-${txIdStr}`]} onClick={() => handleAction("execute", tx.id)}>
-                                    {actionLoading[`execute-${txIdStr}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3 mr-1" />}
-                                    Execute
-                                  </Button>
+                                  <>
+                                    {(() => {
+                                      const nowInSeconds = BigInt(Math.floor(Date.now() / 1000))
+                                      const executionTime = tx.timestamp + timelockPeriod
+                                      const canExecute = nowInSeconds >= executionTime
+                                      
+                                      if (canExecute) {
+                                        return (
+                                          <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8"
+                                            disabled={actionLoading[`execute-${txIdStr}`]} onClick={() => handleAction("execute", tx.id)}>
+                                            {actionLoading[`execute-${txIdStr}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3 mr-1" />}
+                                            Execute
+                                          </Button>
+                                        )
+                                      } else {
+                                        return (
+                                          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border border-blue-500/50 rounded text-xs">
+                                            <Clock className="h-3 w-3 text-blue-400" />
+                                            <span className="text-blue-300">Execute in:</span>
+                                            <CountdownTimer 
+                                              expiryTimestamp={executionTime}
+                                              onExpired={() => fetchTransactionHistory()}
+                                            />
+                                          </div>
+                                        )
+                                      }
+                                    })()}
+                                  </>
                                 )}
                               </div>
                             )}
                             {isExpired && (
-                                <p className="text-red-500 text-sm flex items-center">
-                                    <TimerOff className="h-4 w-4 mr-1"/> This transaction has expired and can no longer be acted upon.
+                                <p className="text-red-500 text-xs sm:text-sm flex items-center">
+                                    <TimerOff className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex-shrink-0"/> This transaction has expired and can no longer be acted upon.
                                 </p>
                             )}
                           </div>
@@ -656,108 +704,80 @@ export function TransactionManager() {
               )}
             </div>
           )}
-        </CardContent>
+        </CardContent>  
       </Card>
 
-      {/* Details Modal */}
-      <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-[90vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      {/* Transaction Details Modal */}
+      <Dialog open={selectedTx !== null} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedTx(null)
+          setModalDetails(null)
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white text-base sm:text-lg">
-              Transaction Details (ID: {selectedTx?.id.toString()})
+            <DialogTitle className="flex items-center space-x-2">
+              <span>Transaction Details</span>
+              {selectedTx && (
+                <a 
+                  href={`${explorerBaseUrl}/tx/${selectedTx.hash}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline flex items-center text-sm"
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" /> View on Explorer
+                </a>
+              )}
             </DialogTitle>
           </DialogHeader>
-          {isModalLoading || !isDataReady ? (
+          
+          {isModalLoading || !modalDetails ? (
             <div className="text-center py-12">
               <Loader2 className="h-8 w-8 text-blue-500 mx-auto mb-4 animate-spin" />
-              <p className="text-gray-400 text-sm">Loading confirmation details...</p>
+              <p className="text-gray-400 text-sm">Loading details...</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="space-y-2 text-xs sm:text-sm">
-                 <div>
-                    <span className="text-gray-400">Action:</span>
-                    <p className="font-medium text-lg text-blue-300">
-                        {/* Dynamic decoding in modal */}
-                        {selectedTx && getTransactionDescription(selectedTx, contractAddresses, popularTokens)}
-                    </p>
-                 </div>
-                <div>
-                  <span className="text-gray-400">To Address:</span>
-                  <p className="font-mono break-all">{selectedTx?.to}</p>
-                </div>
-                <div>
-                  <span className="text-gray-400">Value:</span>
-                  <p className="font-mono break-all">
-                    {/* Dynamic value in modal */}
-                    {selectedTx && getTransactionValue(selectedTx, popularTokens)}
-                  </p>
-                </div>
-                
-                <div>
-                  <span className="text-gray-400">Initiator:</span>
-                  <p className="font-mono break-all">
-                    {modalDetails?.initiatorName && selectedTx ? (
-                      <>
-                        <span className="text-white font-medium">{modalDetails.initiatorName}</span>
-                        <span className="text-gray-500 ml-2">({truncateAddress(selectedTx.initiator)})</span>
-                      </>
-                    ) : (
-                      'N/A'
-                    )}
-                  </p>
-                </div>
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-2">Initiator</h3>
+                <p className="text-white text-sm">{modalDetails.initiatorName} ({selectedTx!.initiator})</p>
+              </div>
 
-                {expiryPeriod > 0n && selectedTx && (
-                   <div>
-                    <span className="text-gray-400">Expiry Time:</span>
-                    <p className="font-mono break-all">
-                      {new Date(Number(selectedTx.timestamp + expiryPeriod) * 1000).toLocaleString()}
-                    </p>
-                   </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-2">Confirmed By</h3>
+                {modalDetails.confirmedBy.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {modalDetails.confirmedBy.map((owner) => (
+                      <li key={owner.address} className="text-white text-sm">
+                        {owner.name} ({owner.address}) - {owner.percentage.toString()}%
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-400 text-sm">No confirmations yet.</p>
                 )}
               </div>
-              
-              <div>
-                <h4 className="text-base sm:text-lg font-semibold mb-2 flex items-center">
-                  <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-blue-400" />
-                  Confirmation Status
-                </h4>
-                
-                {/* --- UPDATED CONFIRMED BY --- */}
-                <div className="space-y-2">
-                  <span className="text-gray-400 text-xs sm:text-sm">Confirmed By:</span>
-                  {modalDetails?.confirmedBy.length === 0 && <p className="text-gray-500 text-xs sm:text-sm">No confirmations yet.</p>}
-                  {modalDetails?.confirmedBy.map(owner => (
-                    <div key={owner.address} className="flex flex-wrap items-center gap-x-2 text-xs sm:text-sm">
-                      <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 flex-shrink-0" />
-                      <span className="text-white font-medium">{owner.name}</span>
-                      <span className="font-mono break-all text-gray-500">{truncateAddress(owner.address)}</span>
-                      <span className="text-gray-400">({owner.percentage.toString()}%)</span>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* --- UPDATED PENDING BY --- */}
-                <div className="space-y-2 mt-3">
-                  <span className="text-gray-400 text-xs sm:text-sm">Pending Confirmation:</span>
-                  {modalDetails?.pendingBy.length === 0 && <p className="text-gray-500 text-xs sm:text-sm">All owners have confirmed.</p>}
-                  {modalDetails?.pendingBy.map(owner => (
-                    <div key={owner.address} className="flex flex-wrap items-center gap-x-2 text-xs sm:text-sm">
-                      <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
-                      <span className="text-white font-medium">{owner.name}</span>
-                      <span className="font-mono break-all text-gray-500">{truncateAddress(owner.address)}</span>
-                      <span className="text-gray-400">({owner.percentage.toString()}%)</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              <DialogClose asChild>
-                <Button variant="outline" className="w-full border-gray-700 hover:bg-gray-800 text-sm">Close</Button>
-              </DialogClose>
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-2">Pending Confirmation From</h3>
+                {modalDetails.pendingBy.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {modalDetails.pendingBy.map((owner) => (
+                      <li key={owner.address} className="text-white text-sm">
+                        {owner.name} ({owner.address}) - {owner.percentage.toString()}%
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-400 text-sm">All owners have confirmed.</p>
+                )}
+              </div>
             </div>
           )}
+          
+          <DialogClose asChild>
+            <Button variant="outline" className="mt-6 w-full">Close</Button>
+          </DialogClose>
         </DialogContent>
       </Dialog>
     </>

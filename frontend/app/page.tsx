@@ -5,7 +5,7 @@ import { TransactionForm } from "@/components/transaction-form"
 import { TokenManagement } from "@/components/token-management"
 import { AdminSettings } from "@/components/admin-settings"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Wallet, Send, Coins, Settings, List } from "lucide-react"
+import { Wallet, Send, LayoutDashboard, Settings, List } from "lucide-react"
 import { useWeb3 } from "@/hooks/use-web3" 
 import { TransactionManager } from "@/components/transaction" // <-- FIXED PATH
 import { NetworkSelector } from "@/components/network-selector" 
@@ -51,9 +51,9 @@ export default function MultiSigWallet() {
           {isConnected && (
             <div className="container mx-auto px-4 pb-4 lg:hidden">
                 <TabsList className="grid w-full grid-cols-5 bg-gray-800 border border-gray-700">
-                  <TabsTrigger value="dashboard"><Wallet className="h-4 w-4" /></TabsTrigger>
+                  <TabsTrigger value="dashboard"><LayoutDashboard className="h-4 w-4" /></TabsTrigger>
                   <TabsTrigger value="execute"><Send className="h-4 w-4" /></TabsTrigger>
-                  <TabsTrigger value="tokens"><Coins className="h-4 w-4" /></TabsTrigger>
+                  <TabsTrigger value="tokens"><Wallet className="h-4 w-4" /></TabsTrigger>
                   <TabsTrigger value="admin"><Settings className="h-4 w-4" /></TabsTrigger>
                   <TabsTrigger value="transactions"><List className="h-4 w-4" /></TabsTrigger>
                 </TabsList>

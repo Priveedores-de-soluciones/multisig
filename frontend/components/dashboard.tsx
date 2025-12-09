@@ -270,14 +270,6 @@ export function Dashboard() {
           </div>
         </CardContent>
       </Card>
-      
-      {/* Balance Cards (Dynamic) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-        {tokensToDisplay.slice(0, 2).map(token => {
-          const balance = balances[token.symbol] || "0.0"
-          return renderBalanceCard(token, balance)
-        })}
-      </div>
 
       {/* Contract Info and Multisig Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
