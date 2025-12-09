@@ -84,7 +84,7 @@ export default function MultiSigWallet() {
       {/* Footer */}
       <footer className="border-t border-gray-800 bg-[#171717] mt-20">
         <div className="container mx-auto px-4 py-6 text-center text-gray-400">
-          <p>&copy; 2024 MultiSig Wallet. Built with security in mind.</p>
+          <p>&copy; 2025 MultiSig Wallet. Built with security in mind.</p>
         </div>
       </footer>
     </div>
